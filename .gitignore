@@ -1,0 +1,19 @@
+node_modules/
+.next/
+.next-test/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# Secrets
+.env
+.env.local
+
+# App data
+/data/
+/storage/
+
+# Test output
+/test-results/
+/playwright-report/
+/.test-data/
