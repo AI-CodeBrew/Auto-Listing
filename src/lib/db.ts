@@ -150,6 +150,13 @@ export function db(): Database.Database {
 
 const SYNC_TABLES = new Set(["products", "jobs", "sources", "images", "videos", "settings", "counters"]);
 
+/** While a deployment is loading the saved copy, those inserts must not copy the empty database back. */
+let syncPaused = false;
+
+export function setSyncPaused(paused: boolean): void {
+  syncPaused = paused;
+}
+
 function readTable(conn: Database.Database, table: string): Record<string, unknown>[] {
   if (!SYNC_TABLES.has(table)) return [];
   const exists = conn.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table);
@@ -165,7 +172,7 @@ function watchWrites(conn: Database.Database): void {
     const run = stmt.run.bind(stmt);
     stmt.run = ((...args: Parameters<typeof stmt.run>) => {
       const result = run(...args);
-      scheduleSupabaseSync();
+      if (!syncPaused) scheduleSupabaseSync();
       return result;
     }) as typeof stmt.run;
     return stmt;
@@ -173,6 +180,6 @@ function watchWrites(conn: Database.Database): void {
   const exec = conn.exec.bind(conn);
   conn.exec = ((sql: string) => {
     exec(sql);
-    if (!sql.includes("PRAGMA")) scheduleSupabaseSync();
+    if (!syncPaused && !sql.includes("PRAGMA")) scheduleSupabaseSync();
   }) as typeof conn.exec;
 }

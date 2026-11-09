@@ -1,8 +1,6 @@
 import { AiError } from "./ai";
 import { LIMITS } from "./config";
-import { JobBlocked, runResearch } from "./pipeline/research";
 import * as repo from "./repo";
-import { closeBrowser } from "./web/browser";
 
 /**
  * Background research queue. Jobs are rows in SQLite, so they survive a restart.
@@ -35,6 +33,7 @@ async function loop(): Promise<void> {
 }
 
 async function runOne(job: NonNullable<ReturnType<typeof repo.claimNextJob>>): Promise<void> {
+  const { JobBlocked, runResearch } = await import("./pipeline/research");
   try {
     await runResearch(job);
     repo.finishJob(job.id, "DONE", "Ready for review", null);
@@ -53,7 +52,13 @@ async function runOne(job: NonNullable<ReturnType<typeof repo.claimNextJob>>): P
       repo.finishJob(job.id, "FAILED", "Failed", message.split("\n")[0].slice(0, 500));
     }
   } finally {
-    // Do not keep a browser around while the queue is idle.
-    await closeBrowser();
+    // Do not keep a browser around while the queue is idle. Loaded only after a job,
+    // so opening the site does not require the browser package.
+    try {
+      const { closeBrowser } = await import("./web/browser");
+      await closeBrowser();
+    } catch {
+      // A deployment without the browser has nothing to close.
+    }
   }
 }

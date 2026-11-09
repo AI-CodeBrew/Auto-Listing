@@ -9,7 +9,6 @@ const nextConfig: NextConfig = {
     "playwright",
     "playwright-core",
     "ffmpeg-static",
-    "sanitize-html",
     "postgres",
   ],
   // Next infers the root from the nearest lockfile otherwise, and may pick a

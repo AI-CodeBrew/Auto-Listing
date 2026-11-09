@@ -23,7 +23,14 @@ function forwardedFromElsewhere(value: string | null): boolean {
  * Cloudflare header, or when a forwarding header names an address that is not this computer.
  * (Next.js adds its own x-forwarded-* headers with local values, so those alone prove nothing.)
  */
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
+  // The deployed site is the app itself. A tunnel to the copy on this computer stays closed.
+  if (process.env.VERCEL) {
+    const { whenReady } = await import("@/lib/supabase");
+    await whenReady();
+    return NextResponse.next();
+  }
+
   const host = (request.headers.get("host") ?? "").replace(/:\d+$/, "").toLowerCase();
   const viaTunnel =
     !LOCAL_HOSTS.has(host) ||

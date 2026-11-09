@@ -1,3 +1,4 @@
+import type Database from "better-sqlite3";
 import postgres, { type Sql } from "postgres";
 import { config } from "./config";
 
@@ -132,7 +133,13 @@ function client(): Sql | null {
   const url = config.databaseUrl();
   if (!url) return null;
   if (!holder.__plaSupabase) {
-    holder.__plaSupabase = postgres(url, { prepare: false, ssl: "require", max: 1, connect_timeout: 20 });
+    holder.__plaSupabase = postgres(url, {
+      prepare: false,
+      ssl: "require",
+      max: 1,
+      connect_timeout: 20,
+      onnotice: () => undefined,
+    });
   }
   return holder.__plaSupabase;
 }
@@ -169,8 +176,60 @@ async function copyAll(): Promise<void> {
   });
 }
 
+let readyPromise: Promise<void> | null = null;
+
+/** On the deployed site, load the saved copy before any page reads or writes. */
+export function whenReady(): Promise<void> {
+  if (!readyPromise) readyPromise = prepareDeployment();
+  return readyPromise;
+}
+
+function localCount(conn: Database.Database, table: string): number {
+  const exists = conn.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table);
+  if (!exists) return 0;
+  const row = conn.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number };
+  return Number(row.n);
+}
+
+async function prepareDeployment(): Promise<void> {
+  if (!process.env.VERCEL || !config.databaseUrl()) return;
+  const { db, setSyncPaused } = await import("./db");
+  const conn = db();
+  if (schemaReady) await schemaReady.catch(() => undefined);
+  if (!TABLES.every((table) => localCount(conn, table) === 0)) return;
+  const sql = client();
+  if (!sql) return;
+  setSyncPaused(true);
+  try {
+    conn.exec("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
+    for (const table of TABLES) {
+      const rows = (await sql.unsafe(`SELECT * FROM ${table}`)) as Row[];
+      insertRows(conn, table, rows);
+    }
+  } catch (error) {
+    console.error("[supabase] Could not load saved records:", safeMessage(error));
+  } finally {
+    setSyncPaused(false);
+  }
+}
+
+function insertRows(conn: Database.Database, table: string, rows: Row[]): void {
+  if (!rows.length) return;
+  const known = new Set((conn.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((column) => column.name));
+  const columns = Object.keys(rows[0]).filter((column) => known.has(column));
+  if (!columns.length) return;
+  const statement = conn.prepare(`INSERT OR REPLACE INTO ${table} (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`);
+  const write = conn.transaction((items: Row[]) => {
+    for (const row of items) {
+      statement.run(...columns.map((column) => (row[column] === undefined ? null : row[column])));
+    }
+  });
+  write(rows);
+}
+
 async function flush(): Promise<void> {
   if (schemaReady) await schemaReady.catch(() => undefined);
+  await whenReady();
   if (copying) {
     queued = true;
     return;
@@ -197,7 +256,10 @@ export function startSupabaseSync(read: (table: string) => Row[]): void {
   schemaReady = ensureSchema(sql).catch((error: unknown) => {
     console.error("[supabase] Setup failed:", safeMessage(error));
   });
-  void schemaReady.then(() => flush());
+  // Do not copy on boot. An empty deployment database must not replace the saved records.
+  void schemaReady.then(() => {
+    if (!process.env.VERCEL) void flush();
+  });
 }
 
 /** Copies the local database again shortly after a change. */

@@ -17,3 +17,5 @@ next-env.d.ts
 /test-results/
 /playwright-report/
 /.test-data/
+.vercel
+.env*

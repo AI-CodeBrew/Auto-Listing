@@ -1,0 +1,8 @@
+.env
+.env.*
+data
+storage
+.next
+.next-test
+test-results
+playwright-report

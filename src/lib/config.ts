@@ -9,10 +9,10 @@ import path from "node:path";
  */
 export const config = {
   // Runtime folders. The comments stop the bundler from tracing the whole project.
-  dataDir: () => path.resolve(/*turbopackIgnore: true*/ process.env.APP_DATA_DIR || "./data"),
+  dataDir: () => path.resolve(/*turbopackIgnore: true*/ process.env.APP_DATA_DIR || (process.env.VERCEL ? "/tmp/pla-data" : "./data")),
   /** Postgres connection for the Supabase copy. Empty keeps data only on this computer. */
   databaseUrl: () => process.env.DATABASE_URL?.trim() || "",
-  storageDir: () => path.resolve(/*turbopackIgnore: true*/ process.env.APP_STORAGE_DIR || "./storage"),
+  storageDir: () => path.resolve(/*turbopackIgnore: true*/ process.env.APP_STORAGE_DIR || (process.env.VERCEL ? "/tmp/pla-storage" : "./storage")),
 
   /** "openai" or "claude". Without AI_PROVIDER: OpenAI when only OPENAI_API_KEY is set, else Claude. */
   aiProvider: (): "openai" | "claude" => {
