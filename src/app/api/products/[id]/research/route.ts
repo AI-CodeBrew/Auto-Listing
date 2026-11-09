@@ -1,11 +1,16 @@
+import { after } from "next/server";
 import { fail, ok, parseUrlList, rejectForeignRequest } from "@/lib/http";
 import * as repo from "@/lib/repo";
+import { whenReady } from "@/lib/supabase";
 import { normalizeUrl } from "@/lib/web/urls";
 
 type Params = { params: Promise<{ id: string }> };
 
+export const maxDuration = 300;
+
 /** "Search Again", retrying a failed job, or continuing a BLOCKED job with pasted URLs. */
 export async function POST(request: Request, { params }: Params) {
+  await whenReady();
   const refused = rejectForeignRequest(request);
   if (refused) return refused;
   const { id } = await params;
@@ -34,5 +39,11 @@ export async function POST(request: Request, { params }: Params) {
   });
   // After a block, searching again would hit the same block, so only the URLs are used.
   const job = repo.enqueueJob(id, wasBlocked);
+  if (process.env["VERCEL"]) {
+    after(async () => {
+      const { drainQueue } = await import("@/lib/queue");
+      await drainQueue();
+    });
+  }
   return ok({ job }, 202);
 }

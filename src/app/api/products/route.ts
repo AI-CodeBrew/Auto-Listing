@@ -5,17 +5,22 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import busboy from "busboy";
 import sharp from "sharp";
+import { after } from "next/server";
 import { LIMITS } from "@/lib/config";
 import { fail, ok, parseUrlList, rejectForeignRequest } from "@/lib/http";
 import * as repo from "@/lib/repo";
 import { commitFile, removeQuietly, tempPath } from "@/lib/storage";
+import { whenReady } from "@/lib/supabase";
 import type { ProductStage } from "@/lib/types";
 
 const VIDEO_TYPES: Record<string, string> = { "video/mp4": "mp4", "video/quicktime": "mov", "video/webm": "webm" };
 const VIDEO_EXT = /\.(mp4|mov|webm)$/i;
 const ALL_STAGES: ProductStage[] = ["researching", "blocked", "failed", "review", "listing", "rejected", "history"];
 
+export const maxDuration = 300;
+
 export async function GET(request: Request) {
+  await whenReady();
   const raw = new URL(request.url).searchParams.get("stages");
   const stages = raw ? (raw.split(",").filter((s) => ALL_STAGES.includes(s as ProductStage)) as ProductStage[]) : ALL_STAGES;
   if (!stages.length) return fail("Unknown stage");
@@ -95,6 +100,7 @@ function parseUpload(request: Request, productId: string): Promise<Parsed> {
 }
 
 export async function POST(request: Request) {
+  await whenReady();
   const refused = rejectForeignRequest(request);
   if (refused) return refused;
 
@@ -171,6 +177,33 @@ export async function POST(request: Request) {
 
   const searchPhotos = parsed.fields.search_photos !== "0";
   const searchVideos = parsed.fields.search_videos !== "0";
-  const { product, job } = repo.createProductWithJob({ id, name, details, image, images, video, urls, searchPhotos, searchVideos });
-  return ok({ product, job }, 201);
+  // A full copy of every saved row was timing out, so this search never showed up on the page.
+  const dbMod = await import("@/lib/db");
+  const paused = dbMod.isSyncPaused();
+  if (process.env["VERCEL"]) dbMod.setSyncPaused(true);
+  let created: ReturnType<typeof repo.createProductWithJob>;
+  try {
+    created = repo.createProductWithJob({ id, name, details, image, images, video, urls, searchPhotos, searchVideos });
+    if (process.env["VERCEL"]) {
+      const { pushRecords } = await import("@/lib/supabase");
+      await pushRecords(id);
+    }
+  } catch {
+    cleanup();
+    try {
+      dbMod.db().prepare("DELETE FROM products WHERE id = ?").run(id);
+    } catch {
+      // The product row may not have been created.
+    }
+    return fail("The search could not be started. Try again.");
+  } finally {
+    if (process.env["VERCEL"]) dbMod.setSyncPaused(paused);
+  }
+  if (process.env["VERCEL"]) {
+    after(async () => {
+      const { drainQueue } = await import("@/lib/queue");
+      await drainQueue();
+    });
+  }
+  return ok(created, 201);
 }

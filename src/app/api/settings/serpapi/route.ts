@@ -2,14 +2,17 @@ import { fail, ok, rejectForeignRequest } from "@/lib/http";
 import { clearSerpKeySticky, serpOverview } from "@/lib/search/serpapi";
 import { saveSerpPreference } from "@/lib/settings";
 import { config } from "@/lib/config";
+import { whenReady } from "@/lib/supabase";
 
 /** Allowance for both SerpAPI keys. The keys themselves are never included. */
 export async function GET() {
+  await whenReady();
   return ok(await serpOverview());
 }
 
 /** Chooses which .env key is active, and whether a used-up key switches by itself. */
 export async function PUT(request: Request) {
+  await whenReady();
   const refused = rejectForeignRequest(request);
   if (refused) return refused;
 

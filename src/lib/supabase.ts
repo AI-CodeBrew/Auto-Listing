@@ -184,12 +184,12 @@ async function copyAll(): Promise<void> {
   });
 }
 
-let readyPromise: Promise<void> | null = null;
+const gate = globalThis as unknown as { __plaReady?: Promise<void> };
 
 /** On the deployed site, load the saved copy before any page reads or writes. */
 export function whenReady(): Promise<void> {
-  if (!readyPromise) readyPromise = prepareDeployment();
-  return readyPromise;
+  if (!gate.__plaReady) gate.__plaReady = prepareDeployment();
+  return gate.__plaReady;
 }
 
 function localCount(conn: Database.Database, table: string): number {
@@ -200,7 +200,11 @@ function localCount(conn: Database.Database, table: string): number {
 }
 
 async function prepareDeployment(): Promise<void> {
-  if (!process.env.VERCEL || !config.databaseUrl()) return;
+  if (!process.env.VERCEL) return;
+  if (!config.databaseUrl()) {
+    console.error("[supabase] DATABASE_URL is missing on the server");
+    return;
+  }
   const { db, setSyncPaused } = await import("./db");
   const conn = db();
   setSyncPaused(true);
@@ -208,16 +212,140 @@ async function prepareDeployment(): Promise<void> {
     if (schemaReady) await schemaReady;
     const sql = client();
     if (!sql) return;
-    if (TABLES.every((table) => localCount(conn, table) === 0)) {
+    // A restarted server can already have an empty settings row. Load the saved products anyway.
+    if (localCount(conn, "products") === 0) {
       conn.exec("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
       for (const table of TABLES) {
         const rows = (await sql.unsafe(`SELECT * FROM ${table}`)) as Row[];
         insertRows(conn, table, rows);
       }
+      console.log("[supabase] saved products", localCount(conn, "products"));
     }
     setSyncPaused(false);
   } catch (error) {
     console.error("[supabase] Could not load saved records:", safeMessage(error));
+  }
+}
+
+function newerThan(conn: Database.Database, table: string, id: string, remoteUpdated: unknown): boolean {
+  const local = conn.prepare(`SELECT updated_at FROM ${table} WHERE id = ?`).get(id) as { updated_at: string } | undefined;
+  if (!local) return true;
+  return String(remoteUpdated ?? "") > local.updated_at;
+}
+
+const JOB_UPDATE = new Set(["step", "log", "status", "message", "updated_at", "finished_at"]);
+
+const CONFLICT: Record<string, string> = { settings: "key", counters: "name" };
+
+/** Inserts or replaces one row. A full copy of every table is too slow while a search is open. */
+async function upsertRow(sql: Sql, table: string, row: Row): Promise<void> {
+  const keys = Object.keys(row).filter((key) => row[key] !== undefined);
+  if (!keys.length) return;
+  const conflict = CONFLICT[table] ?? "id";
+  const updates = keys.filter((key) => key !== conflict);
+  if (!updates.length) {
+    await sql`INSERT INTO ${sql(table)} ${sql(row, ...keys)} ON CONFLICT (${sql(conflict)}) DO NOTHING`;
+    return;
+  }
+  await sql`INSERT INTO ${sql(table)} ${sql(row, ...keys)} ON CONFLICT (${sql(conflict)}) DO UPDATE SET ${sql(row, ...updates)}`;
+}
+
+/**
+ * Saves one product and the rows that belong to it.
+ * Copying every product, photo, and video at once was timing out, so a new search never became visible.
+ */
+export async function pushRecords(productId: string): Promise<void> {
+  if (!process.env["VERCEL"] || !config.databaseUrl() || !readRows) return;
+  const sql = client();
+  if (!sql) return;
+  const products = readRows("products").filter((row) => row.id === productId);
+  if (!products.length) return;
+  const owned = (table: string) => readRows!(table).filter((row) => row.product_id === productId);
+  try {
+    for (const row of products) await upsertRow(sql, "products", row);
+    for (const table of ["jobs", "sources", "images", "videos"] as const) {
+      for (const row of owned(table)) await upsertRow(sql, table, row);
+    }
+  } catch (error) {
+    console.error("[supabase] Could not save this search:", safeMessage(error));
+    throw error;
+  }
+}
+
+/** Saves one search step without copying every record. */
+export async function pushJobUpdate(id: string, fields: Record<string, string | null>): Promise<void> {
+  if (!process.env["VERCEL"] || !config.databaseUrl()) return;
+  const sql = client();
+  if (!sql) return;
+  const keys = Object.keys(fields).filter((key) => JOB_UPDATE.has(key));
+  if (!keys.length) return;
+  try {
+    await sql`UPDATE jobs SET ${sql(fields, ...keys)} WHERE id = ${id}`;
+  } catch (error) {
+    console.error("[supabase] Could not update the search step:", safeMessage(error));
+  }
+}
+
+/** Reads one product and its latest search. Used while a search is on screen. */
+export async function pullOne(id: string): Promise<void> {
+  if (!process.env["VERCEL"] || !config.databaseUrl()) return;
+  const sql = client();
+  if (!sql) return;
+  try {
+    const products = (await sql`SELECT * FROM products WHERE id = ${id}`) as Row[];
+    const jobs = (await sql`SELECT * FROM jobs WHERE product_id = ${id} ORDER BY seq DESC LIMIT 1`) as Row[];
+    if (!products.length && !jobs.length) return;
+    const { db, isSyncPaused, setSyncPaused } = await import("./db");
+    const conn = db();
+    const paused = isSyncPaused();
+    setSyncPaused(true);
+    try {
+      if (products[0] && newerThan(conn, "products", String(products[0].id), products[0].updated_at)) insertRows(conn, "products", [products[0]]);
+      if (jobs[0] && newerThan(conn, "jobs", String(jobs[0].id), jobs[0].updated_at)) insertRows(conn, "jobs", [jobs[0]]);
+    } finally {
+      setSyncPaused(paused);
+    }
+  } catch (error) {
+    console.error("[supabase] Could not refresh this search:", safeMessage(error));
+  }
+}
+
+/** The deployed site has more than one server. A search runs on one of them, so the page reads the saved copy. */
+export async function pullLatest(): Promise<void> {
+  if (!process.env["VERCEL"] || !config.databaseUrl()) return;
+  const sql = client();
+  if (!sql) return;
+  try {
+    const products = (await sql`SELECT * FROM products ORDER BY updated_at DESC LIMIT 40`) as Row[];
+    const jobs = (await sql`SELECT * FROM jobs ORDER BY updated_at DESC LIMIT 40`) as Row[];
+    const images = (await sql`SELECT * FROM images LIMIT 200`) as Row[];
+    const sources = (await sql`SELECT * FROM sources LIMIT 200`) as Row[];
+    const videos = (await sql`SELECT * FROM videos LIMIT 100`) as Row[];
+    const { db, isSyncPaused, setSyncPaused } = await import("./db");
+    const conn = db();
+    const paused = isSyncPaused();
+    setSyncPaused(true);
+    try {
+      for (const row of products) {
+        if (newerThan(conn, "products", String(row.id), row.updated_at)) insertRows(conn, "products", [row]);
+      }
+      for (const row of jobs) {
+        if (newerThan(conn, "jobs", String(row.id), row.updated_at)) insertRows(conn, "jobs", [row]);
+      }
+      for (const [table, rows] of [
+        ["images", images],
+        ["sources", sources],
+        ["videos", videos],
+      ] as const) {
+        for (const row of rows) {
+          if (!conn.prepare(`SELECT 1 FROM ${table} WHERE id = ?`).get(String(row.id))) insertRows(conn, table, [row]);
+        }
+      }
+    } finally {
+      setSyncPaused(paused);
+    }
+  } catch (error) {
+    console.error("[supabase] Could not refresh records:", safeMessage(error));
   }
 }
 
@@ -272,6 +400,11 @@ export function startSupabaseSync(read: (table: string) => Row[]): void {
   void schemaReady.then(() => {
     void flush();
   });
+}
+
+/** Saves the local records immediately. Used before the deployed site answers, so the next page can see them. */
+export function saveNow(): Promise<void> {
+  return flush();
 }
 
 /** Copies the local database again shortly after a change. */

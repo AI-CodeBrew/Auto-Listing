@@ -1,12 +1,17 @@
 import { fail, ok, rejectForeignRequest } from "@/lib/http";
 import * as repo from "@/lib/repo";
+import { pullOne, whenReady } from "@/lib/supabase";
 
 type Params = { params: Promise<{ id: string }> };
 
 const MONEY = /^\d+(\.\d{1,2})?$/;
 
+export const maxDuration = 60;
+
 export async function GET(_request: Request, { params }: Params) {
   const { id } = await params;
+  await whenReady();
+  await pullOne(id);
   const product = repo.getProduct(id);
   if (!product) return fail("Product not found", 404);
   return ok({
@@ -20,6 +25,7 @@ export async function GET(_request: Request, { params }: Params) {
 
 /** Saves edits from the Listing tab. */
 export async function PATCH(request: Request, { params }: Params) {
+  await whenReady();
   const refused = rejectForeignRequest(request);
   if (refused) return refused;
   const { id } = await params;

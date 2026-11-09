@@ -6,9 +6,11 @@ import * as repo from "@/lib/repo";
 import { serpPlan } from "@/lib/search/serpapi";
 import { fastmossApiKey } from "@/lib/settings";
 import { missingShopifySettings } from "@/lib/shopify/client";
+import { whenReady } from "@/lib/supabase";
 
 /** Tab counts and setup state. Reports only which settings are missing, never their values. */
 export async function GET() {
+  await whenReady();
   const totals = repo.usageTotals();
   const recentGpt = repo
     .listRecentJobs(30)

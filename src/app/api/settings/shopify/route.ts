@@ -1,14 +1,17 @@
 import { fail, ok, rejectForeignRequest } from "@/lib/http";
 import { clearShopifyCredentials, isValidDomain, normalizeDomain, saveShopifyCredentials, shopifyCredentials, shopifySummary } from "@/lib/settings";
 import { clearTokenCache } from "@/lib/shopify/client";
+import { whenReady } from "@/lib/supabase";
 
 /** Shows what is saved. The client secret is never included, only whether one exists. */
 export async function GET() {
+  await whenReady();
   return ok(shopifySummary());
 }
 
 /** Saves the store details. Leave the secret empty to keep the one already saved. */
 export async function PUT(request: Request) {
+  await whenReady();
   const refused = rejectForeignRequest(request);
   if (refused) return refused;
 
@@ -29,6 +32,7 @@ export async function PUT(request: Request) {
 
 /** Forgets the details saved on the page. */
 export async function DELETE(request: Request) {
+  await whenReady();
   const refused = rejectForeignRequest(request);
   if (refused) return refused;
   clearShopifyCredentials();

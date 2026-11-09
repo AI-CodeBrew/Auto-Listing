@@ -1,10 +1,12 @@
 import { fail, ok, rejectForeignRequest } from "@/lib/http";
 import * as repo from "@/lib/repo";
+import { whenReady } from "@/lib/supabase";
 
 type Params = { params: Promise<{ id: string }> };
 
 /** "Approve to Listing": saves the user's text and selection and moves the product to Tab 3. */
 export async function POST(request: Request, { params }: Params) {
+  await whenReady();
   const refused = rejectForeignRequest(request);
   if (refused) return refused;
   const { id } = await params;

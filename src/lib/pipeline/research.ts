@@ -4,7 +4,6 @@ import { config, LIMITS } from "../config";
 import { DUPLICATE_DISTANCE, downloadImage, forVision, hammingDistance, inspectImageFile, jpegForLens } from "../media/images";
 import { downloadVideo, extractFrames } from "../media/videos";
 import * as repo from "../repo";
-import { getSearchProvider } from "../search";
 import { searchVideos, type FastMossVideo } from "../search/fastmoss";
 import { marketplaceOfHit } from "../search/marketplaces";
 import { lensSearch, searchImages, uploadLensImage, type ImageHit } from "../search/serpapi";
@@ -12,7 +11,6 @@ import { fastmossApiKey } from "../settings";
 import { clearResearchFiles, ensureDirs, mediaPath } from "../storage";
 import { chooseBestImages, findCopiedPhrases, finalizeListing } from "./text";
 import type { Job, Product, ProductImage, VisionResult } from "../types";
-import { openPage, withPage } from "../web/browser";
 import { BlockedError, SearchDisallowedError } from "../web/errors";
 import { extractPage, type PageData } from "../web/extract";
 import { isAllowedByRobots, politeWait } from "../web/robots";
@@ -57,6 +55,7 @@ export async function runResearch(job: Job): Promise<void> {
   repo.setUsage(job.id, repo.emptyUsage());
   const step = (text: string) => repo.setJobStep(job.id, text);
 
+  step("Looking up the product");
   await ai.aiPreflight();
 
   // Web results start clean each run, so a job resumed after a restart cannot double them up.
@@ -371,6 +370,7 @@ async function nextPageUrls(state: RunState, query: string, tryNumber: number): 
   const candidates: string[] = tryNumber === 1 ? [...state.product.input_urls] : [];
 
   if (!state.searchUnavailable && query) {
+    const { getSearchProvider } = await import("../search");
     const provider = getSearchProvider();
     try {
       candidates.push(...(await provider.search(query, (tryNumber - 1) * 10)));
@@ -398,9 +398,22 @@ async function nextPageUrls(state: RunState, query: string, tryNumber: number): 
   return keep.slice(0, LIMITS.pagesPerTry);
 }
 
+function browserCannotStart(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /browsers\.json|Executable doesn't exist|Failed to launch|browserType\.launch/i.test(message);
+}
+
 /** Steps 4 to 8 for each page, one page at a time. */
 async function visitPages(state: RunState, urls: string[], step: (text: string) => void, options: { verify: boolean } = { verify: true }): Promise<void> {
   const { product } = state;
+  let browser: typeof import("../web/browser");
+  try {
+    browser = await import("../web/browser");
+  } catch {
+    step("Product pages cannot be opened from this server. Continuing with the search results.");
+    state.warnings.push("Product pages could not be opened from this server, so the text uses your details and the search results.");
+    return;
+  }
   for (const [index, url] of urls.entries()) {
     const label = `page ${index + 1} of ${urls.length} (${safeDomain(url)})`;
     step(`Opening ${label}`);
@@ -421,13 +434,18 @@ async function visitPages(state: RunState, urls: string[], step: (text: string) 
 
     let data: PageData;
     try {
-      data = await withPage(async (page) => {
-        const response = await openPage(page, url);
+      data = await browser.withPage(async (page) => {
+        const response = await browser.openPage(page, url);
         // An error page has no product on it, so do not spend AI time on it.
         if (response && response.status() >= 400) throw new Error(`the site answered HTTP ${response.status()}`);
         return extractPage(page);
       });
     } catch (error) {
+      if (browserCannotStart(error)) {
+        step("Product pages cannot be opened from this server. Continuing with the search results.");
+        state.warnings.push("Product pages could not be opened from this server, so the text uses your details and the search results.");
+        return;
+      }
       if (error instanceof BlockedError) {
         state.blockedPages.push({ url, reason: error.message });
         repo.addSource(product.id, { url, status: "rejected", reason: `Blocked: ${error.message}` });

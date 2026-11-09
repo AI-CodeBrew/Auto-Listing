@@ -3,6 +3,7 @@ import { fail } from "@/lib/http";
 import * as repo from "@/lib/repo";
 import { photoTokenValid } from "@/lib/settings";
 import { mediaPath } from "@/lib/storage";
+import { whenReady } from "@/lib/supabase";
 
 type Params = { params: Promise<{ id: string; file: string }> };
 
@@ -12,6 +13,7 @@ type Params = { params: Promise<{ id: string; file: string }> };
  * guessed, and it only ever returns that one photo.
  */
 export async function GET(_request: Request, { params }: Params) {
+  await whenReady();
   const { id, file } = await params;
   const token = file.replace(/\.jpg$/i, "");
   // Every failure looks the same, so nothing can be learned by guessing.

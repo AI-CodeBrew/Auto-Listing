@@ -13,9 +13,8 @@ function hostOnly(host: string): string {
  */
 export function rejectForeignRequest(request: Request): NextResponse | null {
   const host = request.headers.get("host") ?? "";
-  if (!LOCAL_HOSTS.has(hostOnly(host))) return fail("Requests must use localhost.", 403);
-
   const site = request.headers.get("sec-fetch-site");
+  // Another website may not call this app. The page on this same address may.
   if (site && site !== "same-origin" && site !== "none") return fail("Cross-site request refused.", 403);
 
   const origin = request.headers.get("origin");
@@ -26,7 +25,11 @@ export function rejectForeignRequest(request: Request): NextResponse | null {
       return fail("Cross-site request refused.", 403);
     }
   }
-  return null;
+
+  if (LOCAL_HOSTS.has(hostOnly(host))) return null;
+  // The deployed site is this app. A click on that page includes its own address.
+  if (origin || site === "same-origin" || site === "none") return null;
+  return fail("Requests must use localhost.", 403);
 }
 
 export function ok(body: unknown, status = 200): NextResponse {

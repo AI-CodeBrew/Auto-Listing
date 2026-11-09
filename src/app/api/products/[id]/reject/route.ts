@@ -1,10 +1,12 @@
 import { fail, ok, rejectForeignRequest } from "@/lib/http";
 import * as repo from "@/lib/repo";
+import { whenReady } from "@/lib/supabase";
 
 type Params = { params: Promise<{ id: string }> };
 
 /** "Reject": marks the product rejected. Nothing is sent to Shopify. */
 export async function POST(request: Request, { params }: Params) {
+  await whenReady();
   const refused = rejectForeignRequest(request);
   if (refused) return refused;
   const { id } = await params;

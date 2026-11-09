@@ -21,13 +21,18 @@ export function usePolling<T>(url: string, intervalMs: number) {
   const urlRef = useRef(url);
   urlRef.current = url;
 
+  const pending = useRef(false);
   const refresh = useCallback(async () => {
+    if (pending.current) return;
+    pending.current = true;
     try {
       const body = await api<T>(urlRef.current);
       setData(body);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      pending.current = false;
     }
   }, []);
 

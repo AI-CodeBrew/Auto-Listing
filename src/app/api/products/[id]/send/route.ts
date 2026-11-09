@@ -1,11 +1,13 @@
 import { fail, ok, rejectForeignRequest } from "@/lib/http";
 import * as repo from "@/lib/repo";
 import { startSend } from "@/lib/shopify/send";
+import { whenReady } from "@/lib/supabase";
 
 type Params = { params: Promise<{ id: string }> };
 
 /** Starts creating the Shopify draft. Also used by Retry. The Listing tab polls for the result. */
 export async function POST(request: Request, { params }: Params) {
+  await whenReady();
   const refused = rejectForeignRequest(request);
   if (refused) return refused;
   const { id } = await params;

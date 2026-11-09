@@ -8,6 +8,10 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "FynkTech Listing",
   description: "Research products, review the results, and create Shopify drafts.",
+  icons: {
+    icon: [{ url: "/fynktech-logo.png", type: "image/png" }],
+    apple: "/fynktech-logo.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

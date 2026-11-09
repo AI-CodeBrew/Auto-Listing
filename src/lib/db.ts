@@ -159,6 +159,10 @@ export function setSyncPaused(paused: boolean): void {
   syncPaused = paused;
 }
 
+export function isSyncPaused(): boolean {
+  return syncPaused;
+}
+
 function readTable(conn: Database.Database, table: string): Record<string, unknown>[] {
   if (!SYNC_TABLES.has(table)) return [];
   const exists = conn.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table);

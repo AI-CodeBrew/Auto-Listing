@@ -7,8 +7,10 @@ import { LIMITS } from "@/lib/config";
 import { CreativeError, findCreatives, type CreativeRequest } from "@/lib/creatives";
 import { fail, ok, rejectForeignRequest } from "@/lib/http";
 import { removeQuietly, tempPath } from "@/lib/storage";
+import { whenReady } from "@/lib/supabase";
 
 export async function POST(request: Request) {
+  await whenReady();
   const refused = rejectForeignRequest(request);
   if (refused) return refused;
 

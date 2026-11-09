@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { api, fileUrl, formatBytes, safeHref, shortUrl, usePolling } from "@/components/api";
+import { ResearchActivity } from "@/components/ResearchActivity";
 import type { Job, Product, ProductImage, ProductStage, ProductVideo, Source } from "@/lib/types";
 
 interface Detail {
@@ -71,7 +72,7 @@ function ResultRow({ product, onDone }: { product: Product; onDone: () => Promis
           {finished && <ReviewCard id={product.id} onDone={onDone} readOnly={product.stage !== "review"} />}
           {product.stage === "blocked" && <BlockedEditor id={product.id} onDone={onDone} />}
           {product.stage === "failed" && <FailedEditor id={product.id} onDone={onDone} />}
-          {product.stage === "researching" && <p className="muted">This search is still running.</p>}
+          {product.stage === "researching" && <ResearchActivity productId={product.id} />}
         </div>
       )}
     </details>

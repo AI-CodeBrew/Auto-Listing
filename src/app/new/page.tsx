@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { api, usePolling } from "@/components/api";
+import { ResearchActivity } from "@/components/ResearchActivity";
+import type { Job } from "@/lib/types";
 interface Status {
   ai: { ok: boolean; message: string | null };
 }
@@ -29,6 +31,7 @@ export default function NewProductPage() {
   const [searchVideos, setSearchVideos] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [active, setActive] = useState<{ id: string; name: string; job: Job | null } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef(files);
   const dragDepth = useRef(0);
@@ -109,7 +112,8 @@ export default function NewProductPage() {
     for (const item of files) form.append("file", item.file);
     setSubmitting(true);
     try {
-      await api("/api/products", { form });
+      const created = await api<{ product: { id: string }; job: Job | null }>("/api/products", { form });
+      setActive({ id: created.product.id, name: name.trim() || "Your product", job: created.job });
       setName("");
       setDetails("");
       setUrls("");
@@ -131,6 +135,12 @@ export default function NewProductPage() {
         <div className="notice notice-warn" role="status" data-testid="ai-warning">
           <strong>Research cannot run yet.</strong> {status.data.ai.message}
         </div>
+      )}
+      {active && (
+        <section className="card stack">
+          <h2>{active.name}</h2>
+          <ResearchActivity productId={active.id} initialJob={active.job} />
+        </section>
       )}
       <section className="card form-card">
         <form onSubmit={submit} className="form">
@@ -239,7 +249,7 @@ export default function NewProductPage() {
           {error && <p className="error" role="alert">{error}</p>}
           <div className="row">
             <button className="btn btn-primary" type="submit" disabled={submitting || (files.length === 0 && !name.trim())}>
-              {submitting ? "Uploading..." : "Start research"}
+              {submitting ? "Starting the search..." : "Start research"}
             </button>
             <Link href="/review">Open results</Link>
           </div>

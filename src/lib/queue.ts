@@ -6,8 +6,28 @@ import * as repo from "./repo";
  * Background research queue. Jobs are rows in SQLite, so they survive a restart.
  * A single loop runs in the server process and handles one job at a time.
  */
-const holder = globalThis as unknown as { __plaWorkerStarted?: boolean };
+const holder = globalThis as unknown as { __plaWorkerStarted?: boolean; __plaDraining?: boolean };
 const POLL_MS = 500;
+
+/** Runs queued jobs created on the deployed site, where there is no always-on loop. */
+export async function drainQueue(): Promise<void> {
+  if (holder.__plaDraining) return;
+  holder.__plaDraining = true;
+  const { isSyncPaused, setSyncPaused } = await import("./db");
+  const paused = isSyncPaused();
+  // Step-by-step updates are saved on their own. A full copy waits until the search finishes.
+  setSyncPaused(true);
+  try {
+    for (;;) {
+      const job = repo.claimNextJob();
+      if (!job) return;
+      await runOne(job);
+    }
+  } finally {
+    setSyncPaused(paused);
+    holder.__plaDraining = false;
+  }
+}
 
 export function startWorker(): void {
   if (holder.__plaWorkerStarted) return;
@@ -59,6 +79,11 @@ async function runOne(job: NonNullable<ReturnType<typeof repo.claimNextJob>>): P
       await closeBrowser();
     } catch {
       // A deployment without the browser has nothing to close.
+    }
+    if (process.env["VERCEL"]) {
+      await repo.jobWritesSettled();
+      const { pushRecords } = await import("./supabase");
+      await pushRecords(job.product_id).catch(() => undefined);
     }
   }
 }

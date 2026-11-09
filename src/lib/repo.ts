@@ -285,16 +285,37 @@ export function claimNextJob(): Job | null {
   return row ? toJob(row) : null;
 }
 
+let jobWrites: Promise<void> = Promise.resolve();
+
+/** Step updates stay in order, so an earlier step cannot arrive after the finished result. */
+function rememberJob(id: string, fields: Record<string, string | null>): void {
+  if (!process.env["VERCEL"]) return;
+  jobWrites = jobWrites
+    .then(() => import("./supabase").then((mod) => mod.pushJobUpdate(id, fields)))
+    .then(
+      () => undefined,
+      () => undefined,
+    );
+}
+
+/** Resolves when the search steps saved so far have reached the shared database. */
+export function jobWritesSettled(): Promise<void> {
+  return jobWrites;
+}
+
 export function setJobStep(id: string, step: string): void {
   const job = getJob(id);
   if (!job) return;
-  const log = [...job.log, { at: now(), text: step }].slice(-200);
-  db().prepare("UPDATE jobs SET step = ?, log = ?, updated_at = ? WHERE id = ?").run(step, JSON.stringify(log), now(), id);
+  const stamp = now();
+  const log = JSON.stringify([...job.log, { at: stamp, text: step }].slice(-200));
+  db().prepare("UPDATE jobs SET step = ?, log = ?, updated_at = ? WHERE id = ?").run(step, log, stamp, id);
+  rememberJob(id, { step, log, updated_at: stamp });
 }
 
 export function finishJob(id: string, status: Exclude<JobStatus, "QUEUED" | "RUNNING">, step: string, message: string | null): void {
   const stamp = now();
   db().prepare("UPDATE jobs SET status = ?, step = ?, message = ?, updated_at = ?, finished_at = ? WHERE id = ?").run(status, step, message, stamp, stamp, id);
+  rememberJob(id, { status, step, message, updated_at: stamp, finished_at: stamp });
 }
 
 /**
