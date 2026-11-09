@@ -2,8 +2,8 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const { whenReady } = await import("./lib/supabase");
-    await whenReady();
     const { startWorker } = await import("./lib/queue");
-    startWorker();
+    // Do not hold the server open while the saved records load.
+    void whenReady().finally(() => startWorker());
   }
 }

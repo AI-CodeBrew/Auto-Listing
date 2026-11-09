@@ -137,7 +137,10 @@ function client(): Sql | null {
       prepare: false,
       ssl: "require",
       max: 1,
-      connect_timeout: 20,
+      connect_timeout: 8,
+      idle_timeout: 20,
+      queue_timeout: 8,
+      query_timeout: 8,
       onnotice: () => undefined,
     });
   }
@@ -146,16 +149,21 @@ function client(): Sql | null {
 
 async function ensureSchema(sql: Sql): Promise<void> {
   await sql.unsafe(SCHEMA);
-  await sql.unsafe(`
-    REVOKE ALL ON TABLE products, jobs, sources, images, videos, settings, counters FROM anon, authenticated;
-    ALTER TABLE products ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE jobs ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE sources ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE images ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE videos ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE counters ENABLE ROW LEVEL SECURITY;
-  `);
+  // These rules already exist. A lock here must not stop the site from opening.
+  try {
+    await sql.unsafe(`
+      REVOKE ALL ON TABLE products, jobs, sources, images, videos, settings, counters FROM anon, authenticated;
+      ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE jobs ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE sources ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE images ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE videos ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE counters ENABLE ROW LEVEL SECURITY;
+    `);
+  } catch (error) {
+    console.error("[supabase] Access rules were not changed:", safeMessage(error));
+  }
 }
 
 async function copyTable(sql: Sql, table: (typeof TABLES)[number], rows: Row[]): Promise<void> {
@@ -195,21 +203,21 @@ async function prepareDeployment(): Promise<void> {
   if (!process.env.VERCEL || !config.databaseUrl()) return;
   const { db, setSyncPaused } = await import("./db");
   const conn = db();
-  if (schemaReady) await schemaReady.catch(() => undefined);
-  if (!TABLES.every((table) => localCount(conn, table) === 0)) return;
-  const sql = client();
-  if (!sql) return;
   setSyncPaused(true);
   try {
-    conn.exec("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
-    for (const table of TABLES) {
-      const rows = (await sql.unsafe(`SELECT * FROM ${table}`)) as Row[];
-      insertRows(conn, table, rows);
+    if (schemaReady) await schemaReady;
+    const sql = client();
+    if (!sql) return;
+    if (TABLES.every((table) => localCount(conn, table) === 0)) {
+      conn.exec("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
+      for (const table of TABLES) {
+        const rows = (await sql.unsafe(`SELECT * FROM ${table}`)) as Row[];
+        insertRows(conn, table, rows);
+      }
     }
+    setSyncPaused(false);
   } catch (error) {
     console.error("[supabase] Could not load saved records:", safeMessage(error));
-  } finally {
-    setSyncPaused(false);
   }
 }
 
@@ -253,12 +261,16 @@ export function startSupabaseSync(read: (table: string) => Row[]): void {
   if (!config.databaseUrl() || schemaReady) return;
   const sql = client();
   if (!sql) return;
+  // The deployed site only reads the saved records. Creating tables on every open locks the database.
+  if (process.env.VERCEL) {
+    schemaReady = Promise.resolve();
+    return;
+  }
   schemaReady = ensureSchema(sql).catch((error: unknown) => {
     console.error("[supabase] Setup failed:", safeMessage(error));
   });
-  // Do not copy on boot. An empty deployment database must not replace the saved records.
   void schemaReady.then(() => {
-    if (!process.env.VERCEL) void flush();
+    void flush();
   });
 }
 

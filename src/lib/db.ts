@@ -140,6 +140,8 @@ export function db(): Database.Database {
     conn.pragma("foreign_keys = ON");
     conn.pragma("busy_timeout = 5000");
     conn.exec(SCHEMA);
+    // A fresh deployment database is empty. Hold copies until the saved records are loaded.
+    if (process.env.VERCEL) syncPaused = true;
     watchWrites(conn);
     holder.__plaDb = conn;
     startSupabaseSync((table) => readTable(conn, table));

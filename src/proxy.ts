@@ -26,8 +26,11 @@ function forwardedFromElsewhere(value: string | null): boolean {
 export async function proxy(request: NextRequest) {
   // The deployed site is the app itself. A tunnel to the copy on this computer stays closed.
   if (process.env.VERCEL) {
-    const { whenReady } = await import("@/lib/supabase");
-    await whenReady();
+    // Pages open immediately. Saved records are loaded before an API answer is sent.
+    if (request.nextUrl.pathname.startsWith("/api/")) {
+      const { whenReady } = await import("@/lib/supabase");
+      await whenReady();
+    }
     return NextResponse.next();
   }
 
