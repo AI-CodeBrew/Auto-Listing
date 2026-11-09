@@ -38,16 +38,16 @@ export const config = {
   /** Replaces https://<store domain> so tests can talk to the mock Shopify. */
   shopifyBaseUrlOverride: () => process.env.SHOPIFY_BASE_URL_OVERRIDE?.trim() || "",
 
-  /** Key 1 is SERPAPI_API_KEY (or SERPAPI_KEY). Key 2 is 2_SERPAPI_API_KEY. Values stay in .env. */
+  /** Key 1 is SERPAPI_API_KEY (or SERPAPI_KEY). Key 2 is SERPAPI_API_KEY_2. Values stay in .env. */
   serpApiKeys: (): [string, string] => [
     process.env.SERPAPI_KEY?.trim() || process.env.SERPAPI_API_KEY?.trim() || "",
-    (process.env["2_SERPAPI_API_KEY"] ?? "").trim(),
+    (process.env.SERPAPI_API_KEY_2 ?? "").trim(),
   ],
   /** True when either SerpAPI key is present. The key string is not returned to the browser. */
   serpApiKey: () => {
     const [first, second] = [
       process.env.SERPAPI_KEY?.trim() || process.env.SERPAPI_API_KEY?.trim() || "",
-      (process.env["2_SERPAPI_API_KEY"] ?? "").trim(),
+      (process.env.SERPAPI_API_KEY_2 ?? "").trim(),
     ];
     return first || second;
   },

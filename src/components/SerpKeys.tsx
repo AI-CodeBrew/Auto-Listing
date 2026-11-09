@@ -98,7 +98,7 @@ function KeyBar({ item, manual, busy, onUse }: { item: KeyView; manual: boolean;
         </>
       )}
       {item.configured && !plan && <p className="muted small">Allowance could not be read yet.</p>}
-      {!item.configured && <p className="muted small">{item.id === 1 ? "Add SERPAPI_API_KEY" : "Add 2_SERPAPI_API_KEY"} in .env and restart the app.</p>}
+      {!item.configured && <p className="muted small">{item.id === 1 ? "Add SERPAPI_API_KEY" : "Add SERPAPI_API_KEY_2"} in .env and restart the app.</p>}
       {manual && item.configured && !item.active && (
         <button className="btn" type="button" disabled={busy || empty} onClick={onUse}>
           Use this key

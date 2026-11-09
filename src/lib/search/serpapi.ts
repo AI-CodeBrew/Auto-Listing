@@ -158,7 +158,7 @@ async function serpGetOnce(key: string, params: Record<string, string>): Promise
   }
 
   if (response.status === 401 || /invalid api key/i.test(body.error ?? "")) {
-    throw new Error("SerpAPI rejected the active key. Check SERPAPI_API_KEY and 2_SERPAPI_API_KEY in .env, then restart the app.");
+    throw new Error("SerpAPI rejected the active key. Check SERPAPI_API_KEY and SERPAPI_API_KEY_2 in .env, then restart the app.");
   }
   if (response.status === 429 || /run out of searches|plan/i.test(body.error ?? "")) {
     const error = new Error(`SerpAPI has no searches left on your plan: ${body.error ?? "rate limit reached"}`);

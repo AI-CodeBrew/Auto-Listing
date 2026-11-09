@@ -24,6 +24,7 @@ export function appEnv(name: string, overrides: Record<string, string> = {}): No
     PUBLIC_BASE_URL: "",
     SERPAPI_KEY: "",
     SERPAPI_API_KEY: "",
+    SERPAPI_API_KEY_2: "",
     AI_API_KEY: "mock-key",
     AI_MODEL: "claude-sonnet-5-5",
     AI_BASE_URL_OVERRIDE: MOCK_URL,
