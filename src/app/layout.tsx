@@ -1,23 +1,23 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import { Tabs } from "@/components/Tabs";
 import "./globals.css";
 
+const inter = Inter({ subsets: ["latin"] });
+
 export const metadata: Metadata = {
-  title: "Product Listing Assistant",
+  title: "FynkTech Listing",
   description: "Research products, review the results, and create Shopify drafts.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body>
-        <header className="app-header">
-          <div className="app-header-inner">
-            <span className="app-title">Product Listing Assistant</span>
-            <Tabs />
-          </div>
-        </header>
-        <main className="app-main">{children}</main>
+    <html lang="en" suppressHydrationWarning>
+      <body className={inter.className} suppressHydrationWarning>
+        <div className="app-shell">
+          <Tabs />
+          <main className="app-main">{children}</main>
+        </div>
       </body>
     </html>
   );

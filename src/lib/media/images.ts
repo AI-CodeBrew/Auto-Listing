@@ -124,6 +124,19 @@ export async function inspectImageFile(productId: string, fileName: string) {
  * Shrinks an image for a Vision request. Large originals would exceed the API's
  * size limits and cost more without improving the check.
  */
+/** A JPEG small enough for SerpAPI's image upload, which accepts at most 500 KB. */
+export async function jpegForLens(input: string | Buffer): Promise<Buffer> {
+  let side = 1280;
+  let quality = 80;
+  let out = await sharp(input).rotate().resize(side, side, { fit: "inside", withoutEnlargement: true }).jpeg({ quality }).toBuffer();
+  while (out.length > 500_000 && side > 480) {
+    quality = Math.max(50, quality - 10);
+    side = Math.round(side * 0.8);
+    out = await sharp(input).rotate().resize(side, side, { fit: "inside", withoutEnlargement: true }).jpeg({ quality }).toBuffer();
+  }
+  return out;
+}
+
 export async function forVision(input: string | Buffer): Promise<Buffer> {
   const side = aiLimits().visionMaxSide;
   return sharp(input)

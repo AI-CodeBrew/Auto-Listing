@@ -12,7 +12,7 @@ export async function POST(request: Request, { params }: Params) {
   if (!product) return fail("Product not found", 404);
   if (product.stage !== "review") return fail("Only products in the Review tab can be approved.", 409);
 
-  const body = (await request.json().catch(() => null)) as { name?: string; description?: string; imageIds?: string[]; videoIds?: string[] } | null;
+  const body = (await request.json().catch(() => null)) as { name?: string; category?: string; description?: string; imageIds?: string[]; videoIds?: string[] } | null;
   if (!body) return fail("Invalid request");
   const name = (body.name ?? "").trim();
   if (!name) return fail("The product needs a name.");
@@ -30,6 +30,7 @@ export async function POST(request: Request, { params }: Params) {
   repo.setVideoOrder(id, videoIds);
   repo.updateProduct(id, {
     name,
+    category: (body.category ?? product.category ?? "").trim() || null,
     description: body.description ?? product.description,
     stage: "listing",
     sku: product.sku ?? repo.nextSku(),

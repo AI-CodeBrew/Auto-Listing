@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api, usePolling } from "@/components/api";
+import { SerpKeys } from "@/components/SerpKeys";
 
 interface Summary {
   domain: string;
@@ -38,6 +39,7 @@ export default function ShopifyPage() {
 
   const saved = summary.data;
   const connected = Boolean(saved && saved.domain && saved.clientId && saved.hasSecret);
+  const [open, setOpen] = useState<null | "shopify" | "serp">(null);
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
@@ -93,10 +95,29 @@ export default function ShopifyPage() {
   }
 
   return (
-    <div className="stack">
+    <div className="page stack">
+      <header className="page-head">
+        <h1>Integrations</h1>
+        <p>Choose Shopify or SerpAPI.</p>
+      </header>
+      <div className="integration-grid">
+        <button type="button" className={open === "shopify" ? "integration-option integration-option-on" : "integration-option"} aria-expanded={open === "shopify"} onClick={() => setOpen(open === "shopify" ? null : "shopify")}>
+          <ShopifyLogo large />
+          <span>Shopify</span>
+        </button>
+        <button type="button" className={open === "serp" ? "integration-option integration-option-on" : "integration-option"} aria-expanded={open === "serp"} onClick={() => setOpen(open === "serp" ? null : "serp")}>
+          <SerpApiLogo large />
+          <span>SerpAPI</span>
+        </button>
+      </div>
+      {open === "serp" && <SerpKeys controls />}
+      {open === "shopify" && <>
       <section className="card stack">
         <div className="row row-between">
-          <h1>Shopify</h1>
+          <h2 className="row">
+            <ShopifyLogo />
+            Shopify
+          </h2>
           <span className={connected ? "pill pill-shopify-draft" : "pill pill-muted"} data-testid="shopify-connection-state">
             {connected ? "Details saved" : "Not connected"}
           </span>
@@ -180,6 +201,27 @@ export default function ShopifyPage() {
           <li>Open the app&apos;s <strong>Settings</strong> and copy the <strong>Client ID</strong> and <strong>Secret</strong> into the form above.</li>
         </ol>
       </section>
+      </>}
     </div>
+  );
+}
+
+function ShopifyLogo({ large = false }: { large?: boolean }) {
+  return (
+    <svg className={large ? "integration-logo" : "integration-logo-sm"} viewBox="0 0 109.5 124.5" aria-hidden="true">
+      <path fill="#95BF47" d="M95.9 23.9c-.1-.6-.6-1-1.1-1-.5 0-9.3-.2-9.3-.2s-7.4-7.2-8.1-7.9c-.7-.7-2.2-.5-2.7-.3 0 0-1.4.4-3.7 1.1-.4-1.3-1-2.8-1.8-4.4-2.6-5-6.5-7.7-11.1-7.7 0 0 0 0 0 0-.3 0-.6 0-1 .1-.1-.2-.3-.3-.4-.5-2-2.2-4.6-3.2-7.7-3.1-6 .2-12 4.5-16.8 12.2-3.4 5.4-6 12.2-6.7 17.5-6.9 2.1-11.7 3.6-11.8 3.7-3.5 1.1-3.6 1.2-4 4.5C8.4 40.2-.8 110.8-.8 110.8l75.6 13.1V23.9h21.1z" />
+      <path fill="#5E8E3E" d="M94.8 22.9c-.5 0-9.3-.2-9.3-.2s-7.4-7.2-8.1-7.9c-.3-.3-.6-.4-1-.5l-10.2 110.2 31.4-6.8C97.6 117.6 95.9 24.9 94.8 22.9z" />
+      <path fill="#FFF" d="M57.6 39.2s-3.6-1.9-8-1.9c-6.4 0-6.7 4-6.7 5 0 5.5 14.3 7.6 14.3 20.5 0 10.1-6.4 16.6-15.1 16.6-10.4 0-15.7-6.5-15.7-6.5l2.8-9.2s5.5 4.7 10.1 4.7c3 0 4.3-2.4 4.3-4.1 0-7.2-11.8-7.5-11.8-19.3 0-9.9 7.1-19.5 21.5-19.5 5.5 0 8.3 1.6 8.3 1.6l-4 12.1z" />
+    </svg>
+  );
+}
+
+function SerpApiLogo({ large = false }: { large?: boolean }) {
+  return (
+    <svg className={large ? "integration-logo" : "integration-logo-sm"} viewBox="0 0 48 48" aria-hidden="true">
+      <rect width="48" height="48" rx="12" fill="#111827" />
+      <circle cx="21" cy="21" r="8" fill="none" stroke="#4ade80" strokeWidth="3" />
+      <path d="M27 27 L36 36" stroke="#4ade80" strokeWidth="3" strokeLinecap="round" />
+    </svg>
   );
 }

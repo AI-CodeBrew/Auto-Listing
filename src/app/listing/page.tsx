@@ -19,11 +19,15 @@ const STATUS_LABEL: Record<ShopifyStatus, string> = {
 
 export default function ListingPage() {
   const { data, refresh } = usePolling<{ products: Product[] }>("/api/products?stages=listing", 1500);
+  const waiting = data?.products.filter((product) => !product.shopify_product_id) ?? [];
   return (
-    <div className="stack">
-      <h1>Listing</h1>
-      {data && data.products.length === 0 && <p className="muted">No approved products yet. Approve one in the Review tab.</p>}
-      {data?.products.map((product) => <ListingCard key={product.id} live={product} onChange={refresh} />)}
+    <div className="page stack">
+      <header className="page-head">
+        <h1>Approved listings</h1>
+        <p>These are approved and not on Shopify yet. Open one to edit it, then push it.</p>
+      </header>
+      {data && waiting.length === 0 && <p className="muted">Nothing is waiting to be pushed.</p>}
+      {waiting.map((product) => <ListingCard key={product.id} live={product} onChange={refresh} />)}
     </div>
   );
 }
@@ -40,6 +44,7 @@ function ListingCard({ live, onChange }: { live: Product; onChange: () => Promis
   const id = live.id;
   const [loaded, setLoaded] = useState(false);
   const [name, setName] = useState("");
+  const [category, setCategory] = useState("");
   const [sku, setSku] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
@@ -56,6 +61,7 @@ function ListingCard({ live, onChange }: { live: Product; onChange: () => Promis
     api<Detail>(`/api/products/${id}`)
       .then((body) => {
         setName(body.product.name ?? "");
+        setCategory(body.product.category ?? "");
         setSku(body.product.sku ?? "");
         setDescription(body.product.description ?? "");
         setPrice(body.product.price ?? "");
@@ -67,10 +73,8 @@ function ListingCard({ live, onChange }: { live: Product; onChange: () => Promis
       .catch((e: Error) => setError(e.message));
   }, [id]);
 
-  if (!loaded) return <div className="card muted">{error ?? "Loading..."}</div>;
-
   const status = live.shopify_status;
-  const locked = status === "sending" || status === "draft";
+  const locked = status === "sending";
   const edit = <T,>(setter: (value: T) => void) => (value: T) => {
     setter(value);
     setDirty(true);
@@ -83,7 +87,7 @@ function ListingCard({ live, onChange }: { live: Product; onChange: () => Promis
     try {
       await api(`/api/products/${id}`, {
         method: "PATCH",
-        json: { name, sku, description, price, cost, imageIds: images.map((image) => image.id), videoIds: videos.map((video) => video.id) },
+        json: { name, sku, category, description, price, cost, imageIds: images.map((image) => image.id), videoIds: videos.map((video) => video.id) },
       });
       setDirty(false);
       setError(null);
@@ -112,11 +116,13 @@ function ListingCard({ live, onChange }: { live: Product; onChange: () => Promis
   }
 
   return (
-    <article className="card stack" data-testid="listing-card" data-product={id} data-status={status}>
-      <div className="row row-between">
-        <h2 className="card-title">{name || "Untitled"}</h2>
+    <details className="card listing-fold" data-testid="listing-card" data-product={id} data-status={status}>
+      <summary>
+        <span className="card-title">{name || live.name || "Untitled"}</span>
         <span className={`pill pill-shopify-${status}`} data-testid="shopify-status">{STATUS_LABEL[status]}</span>
-      </div>
+      </summary>
+      {!loaded && <div className="listing-body muted">{error ?? "Loading..."}</div>}
+      {loaded && <div className="listing-body">
 
       {status === "error" && live.shopify_error && (
         <div className="notice notice-error" role="alert" data-testid="shopify-error">{live.shopify_error}</div>
@@ -134,8 +140,12 @@ function ListingCard({ live, onChange }: { live: Product; onChange: () => Promis
       <fieldset disabled={locked} className="plain-fieldset stack">
         <div className="three-col">
           <label className="field field-wide">
-            <span>Name</span>
+            <span>Product name</span>
             <input type="text" value={name} onChange={(e) => edit(setName)(e.target.value)} data-testid="listing-name" />
+          </label>
+          <label className="field">
+            <span>Category</span>
+            <input type="text" value={category} onChange={(e) => edit(setCategory)(e.target.value)} data-testid="listing-category" />
           </label>
           <label className="field">
             <span>SKU</span>
@@ -206,7 +216,7 @@ function ListingCard({ live, onChange }: { live: Product; onChange: () => Promis
 
       <div className="row">
         {status === "ready" && (
-          <button className="btn btn-primary" disabled={busy} onClick={send} data-testid="send-button">Approve: Send to Shopify Draft</button>
+          <button className="btn btn-primary" disabled={busy} onClick={send} data-testid="send-button">Push to Shopify</button>
         )}
         {status === "error" && (
           <button className="btn btn-primary" disabled={busy} onClick={send} data-testid="retry-button">Retry</button>
@@ -230,6 +240,7 @@ function ListingCard({ live, onChange }: { live: Product; onChange: () => Promis
           <a className="btn" href={safeHref(live.shopify_admin_url)} target="_blank" rel="noopener noreferrer" data-testid="open-in-shopify">Open in Shopify</a>
         )}
       </div>
-    </article>
+      </div>}
+    </details>
   );
 }

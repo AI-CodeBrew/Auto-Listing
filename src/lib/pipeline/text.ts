@@ -106,7 +106,8 @@ export function finalizeListing(draft: ListingDraft, sellers: string[], fallback
     ).values(),
   ];
   const description = [markClaims(paragraph, claims), "", ...bullets.map((bullet) => `- ${markClaims(bullet, claims)}`)].join("\n").trim();
-  return { name, nameOptions, description, claims };
+  const category = removeStoreWords(draft.category || "", sellers).replace(/\s+/g, " ").trim().slice(0, 60);
+  return { name, nameOptions, category, description, claims };
 }
 
 /** Ranks passing images and returns the IDs to preselect (5 to 10 when that many pass). */

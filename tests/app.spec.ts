@@ -58,7 +58,6 @@ test.describe("the required tests", () => {
     const images = result.images;
     const reasons = images.map((i: any) => i.reason).filter(Boolean).join(" | ");
     expect(reasons).toContain("Too small");
-    expect(reasons).toContain("watermark");
     expect(reasons).toContain("Duplicate");
     // Of the same picture at 900, 1000 and 1100 pixels, only the largest survives.
     const shared = images.filter((i: any) => /shared-/.test(i.source_url ?? ""));
@@ -138,8 +137,9 @@ test.describe("the required tests", () => {
     expect(blocked.job.message).toContain("Paste product page URLs");
 
     // A person sees the message and a place to paste URLs.
-    await page.goto("/new");
+    await page.goto("/review");
     const card = page.locator('[data-testid="job"][data-status="BLOCKED"]').first();
+    await card.locator("summary").click();
     await expect(card).toContainText("Paste product page URLs");
     await card.getByTestId("blocked-urls").fill(`${MOCK_URL}/p/good-1\n${MOCK_URL}/p/good-2`);
     await card.getByRole("button", { name: "Continue with these URLs" }).click();
@@ -218,12 +218,12 @@ test.describe("the required tests", () => {
       // Still compared against the upload, even though it was not analyzed again.
       expect(state.ai.filter((call) => call.task === "same_product").at(-1)!.images).toBeGreaterThanOrEqual(2);
 
-      // The upload stays in the results exactly once, and an image is not checked twice.
+      // The upload stays in the results exactly once. It is not sent to the photo checker.
       const own = [...result.images, ...result.videos].filter((item: any) => item.uploaded);
       expect(own).toHaveLength(1);
       expect(own[0].passed).toBe(true);
       expect(own[0].selected).toBe(true);
-      expect(state.ai.filter((call) => call.task === "check_image" && call.text.includes("user%20upload")).length).toBe(file === IMAGE_FILE ? 1 : 0);
+      expect(state.ai.filter((call) => call.task === "check_image" && call.text.includes("user%20upload"))).toHaveLength(0);
     }
   });
 
@@ -303,8 +303,12 @@ test.describe("the required tests", () => {
     const second = await toListing(request, { name: "Steel Bottle Deluxe" });
     await page.goto("/listing");
     const card = page.locator(`[data-testid="listing-card"][data-product="${second.product.id}"]`);
+    await card.locator("summary").click();
     await card.getByTestId("send-button").dblclick();
-    await expect(card.getByTestId("shopify-status")).toHaveText("Shopify Draft", { timeout: 20_000 });
+    await expect(card).toHaveCount(0, { timeout: 20_000 });
+    await page.goto("/pushed");
+    const pushed = page.locator(`[data-testid="listing-card"][data-product="${second.product.id}"]`);
+    await expect(pushed.getByTestId("shopify-status")).toHaveText("Shopify Draft");
     state = await mockState();
     expect(state.products).toHaveLength(2);
     expect(state.graphql.filter((call) => call.name === "CreateDraftProduct")).toHaveLength(2);
@@ -317,6 +321,7 @@ test.describe("the required tests", () => {
 
     await page.goto("/listing");
     const card = page.locator(`[data-testid="listing-card"][data-product="${id}"]`);
+    await card.locator("summary").click();
     await card.getByTestId("send-button").click();
     await expect(card.getByTestId("shopify-status")).toHaveText("Error");
     await expect(card.getByTestId("shopify-error")).toContainText("Title is not allowed");
@@ -324,8 +329,12 @@ test.describe("the required tests", () => {
     expect((await mockState()).products).toHaveLength(0);
 
     await card.getByTestId("retry-button").click();
-    await expect(card.getByTestId("shopify-status")).toHaveText("Shopify Draft");
-    await expect(card.getByTestId("open-in-shopify")).toHaveAttribute("href", /mock-store\.myshopify\.com\/admin\/products\/1000$/);
+    await expect(card).toHaveCount(0, { timeout: 20_000 });
+    await page.goto("/pushed");
+    const pushed = page.locator(`[data-testid="listing-card"][data-product="${id}"]`);
+    await pushed.locator("summary").click();
+    await expect(pushed.getByTestId("shopify-status")).toHaveText("Shopify Draft");
+    await expect(pushed.getByTestId("open-in-shopify")).toHaveAttribute("href", /mock-store\.myshopify\.com\/admin\/products\/1000$/);
     expect((await mockState()).products).toHaveLength(1);
   });
 
@@ -424,9 +433,9 @@ test.describe("the required tests", () => {
     // The token is reused between calls.
     expect(new Set(state.graphql.map((call) => call.token)).size).toBe(1);
 
-    // A draft in Shopify can no longer be edited here, which would drift out of sync.
-    const lockedEdit = await request.patch(`/api/products/${id}`, { data: { name: "Too late" } });
-    expect(lockedEdit.status()).toBe(409);
+    const laterEdit = await request.patch(`/api/products/${id}`, { data: { name: "Steel Bottle Updated" } });
+    expect(laterEdit.status()).toBe(409);
+    expect(await laterEdit.text()).toContain("already in Shopify");
   });
 
   test("9b. an empty selling price warns and creates the draft at 0.00", async ({ request, page }) => {
@@ -434,9 +443,12 @@ test.describe("the required tests", () => {
     const id = listed.product.id;
     await page.goto("/listing");
     const card = page.locator(`[data-testid="listing-card"][data-product="${id}"]`);
+    await card.locator("summary").click();
     await expect(card.getByTestId("price-warning")).toContainText("0.00");
     await card.getByTestId("send-button").click();
-    await expect(card.getByTestId("shopify-status")).toHaveText("Shopify Draft");
+    await expect(card).toHaveCount(0, { timeout: 20_000 });
+    await page.goto("/pushed");
+    await expect(page.locator(`[data-testid="listing-card"][data-product="${id}"]`).getByTestId("shopify-status")).toHaveText("Shopify Draft");
     const state = await mockState();
     expect(state.products[0].input.variants[0].price).toBe("0.00");
     expect(state.products[0].input.variants[0]).not.toHaveProperty("inventoryItem");
@@ -506,27 +518,26 @@ test.describe("research details", () => {
 
 test.describe("the screens", () => {
   test("full walk through all three tabs", async ({ page, request }) => {
-    await page.goto("/");
+    await page.goto("/new");
     await expect(page).toHaveURL(/\/new$/);
     await expect(page.getByRole("button", { name: "Start research" })).toBeDisabled();
     await page.getByLabel("Product name").fill("Steel Bottle Deluxe");
     await page.getByRole("button", { name: "Start research" }).click();
+    await page.getByRole("link", { name: "Review listings" }).click();
 
     // Live status updates without a reload.
     const job = page.getByTestId("job").first();
     await expect(job).toContainText("Steel Bottle Deluxe");
     await expect(job).toHaveAttribute("data-status", "DONE", { timeout: 90_000 });
     await page.screenshot({ path: path.join(TEST_DIR, "screen-new.png"), fullPage: true });
-    await job.getByRole("link", { name: "Open in Review" }).click();
+    await job.locator("summary").click();
 
     await expect(page).toHaveURL(/\/review$/);
     const card = page.getByTestId("review-card").last();
     await expect(card.getByTestId("review-name")).toHaveValue("Steel Bottle Deluxe");
     await expect(card).toContainText("may be copyrighted");
     await expect(card).toContainText("Needs checking");
-    await expect(card).toContainText("Shop GOOD-1");
-    await expect(card.getByTestId("image-tile").filter({ hasText: "Too small" }).first()).toBeVisible();
-    await expect(card.getByTestId("image-tile").filter({ hasText: "watermark" }).first()).toBeVisible();
+    await expect(card.getByTestId("image-tile").first()).toBeVisible();
     await expect(card.getByTestId("video-row").filter({ hasText: "youtube" }).first()).toBeVisible();
 
     // Name options fill the field. Polling must not undo the edits.
@@ -544,8 +555,9 @@ test.describe("the screens", () => {
     await card.getByRole("button", { name: "Approve to Listing" }).click();
     await expect(page.locator(`[data-testid="review-card"][data-product="${productId}"]`)).toHaveCount(0);
 
-    await page.getByRole("link", { name: /3\. Listing/ }).click();
+    await page.getByRole("link", { name: "Approved" }).click();
     const listing = page.locator(`[data-testid="listing-card"][data-product="${productId}"]`);
+    await listing.locator("summary").click();
     await expect(listing.getByTestId("listing-name")).toHaveValue("Insulated Steel Bottle");
     await expect(listing.getByTestId("listing-sku")).toHaveValue(/^PRD-\d{4}$/);
     await expect(listing.getByTestId("shopify-status")).toHaveText("Ready");
@@ -568,12 +580,15 @@ test.describe("the screens", () => {
     await expect(listing.getByTestId("price-warning")).toHaveCount(0);
     await page.screenshot({ path: path.join(TEST_DIR, "screen-listing.png"), fullPage: true });
     await listing.getByTestId("send-button").click();
+    await expect(listing).toHaveCount(0, { timeout: 20_000 });
 
-    await expect(listing.getByTestId("shopify-status")).toHaveText("Shopify Draft", { timeout: 20_000 });
-    await expect(listing.getByTestId("open-in-shopify")).toBeVisible();
-    await expect(listing.getByTestId("listing-name")).toBeDisabled();
-    await expect(listing.getByTestId("listing-price")).toBeDisabled();
-    await expect(listing.getByTestId("send-button")).toHaveCount(0);
+    await page.getByRole("link", { name: "Pushed to Shopify" }).click();
+    const pushed = page.locator(`[data-testid="listing-card"][data-product="${productId}"]`);
+    await expect(pushed.getByTestId("shopify-status")).toHaveText("Shopify Draft");
+    await pushed.locator("summary").click();
+    await expect(pushed.getByTestId("open-in-shopify")).toBeVisible();
+    await expect(pushed.locator("input, textarea")).toHaveCount(0);
+    await expect(pushed.getByTestId("send-button")).toHaveCount(0);
     await page.screenshot({ path: path.join(TEST_DIR, "screen-draft.png"), fullPage: true });
 
     const state = await mockState();

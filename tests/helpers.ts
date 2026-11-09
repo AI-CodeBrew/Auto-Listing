@@ -35,6 +35,14 @@ export function appEnv(name: string, overrides: Record<string, string> = {}): No
     BING_BASE_URL_OVERRIDE: MOCK_URL,
     ALLOW_PRIVATE_NETWORK: "1",
     REQUEST_DELAY_MS: "10",
+    DATABASE_URL: "",
+    SUPABASE_URL: "",
+    SUPABASE_ANON_KEY: "",
+    SUPABASE_SERVICE_ROLE_KEY: "",
+    YOUTUBE_API_KEY: "",
+    META_ACCESS_TOKEN: "",
+    META_APP_ID: "",
+    META_APP_SECRET: "",
     ...overrides,
   };
 }

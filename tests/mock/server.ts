@@ -20,7 +20,7 @@ function freshState() {
     openai: [] as { task: string; images: number; model: string; strict: boolean }[],
     searches: [] as string[],
     serp: [] as { engine: string | null; q: string; ijn: string | null; apiKey: string | null }[],
-    lens: [] as { url: string; fetchStatus: number; fetchType: string | null; bytes: number }[],
+    lens: [] as { imageId: string; bytes: number }[],
     pageHits: {} as Record<string, number>,
     ai: [] as { task: string; images: number; text: string; betas: string | null; model: string }[],
     oauthCalls: [] as Record<string, string>[],
@@ -152,6 +152,7 @@ function aiAnswer(task: string, text: string): Record<string, unknown> {
       return {
         best_name: "Steel Bottle Deluxe - Shop GOOD-1",
         name_options: ["Insulated Steel Bottle", "Daily Steel Water Bottle"],
+        category: "Water bottles",
         description: "A tough bottle that keeps your drink cold on the go. It is BPA-free according to the seller. Rated 5 stars by thousands of customers.",
         feature_bullets: ["Double-wall steel body", "Microwave-safe lid", "Leak-resistant cap", "4.9 out of 5 stars"],
         claims_needing_check: ["BPA-free"],
@@ -289,6 +290,18 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse, videoF
     return json(res, { choices: [{ finish_reason: "stop", message: { role: "assistant", content: JSON.stringify(aiAnswer(task, text)) } }] });
   }
 
+  // ----- SerpAPI image upload (Google Lens) -----
+  if (path === "/image" && req.method === "POST") {
+    const raw = await body(req);
+    const parsed = await new Request("http://x", { method: "POST", headers: { "content-type": req.headers["content-type"]! }, body: new Uint8Array(raw) }).formData();
+    const file = parsed.get("image") as File | null;
+    if (parsed.get("api_key") !== "mock-serp-key") return json(res, { error: "Invalid API key." }, 401);
+    if (!file || file.size < 100) return json(res, { error: "Invalid image format. Supported format: jpg, jpeg, png, webp" }, 400);
+    const imageId = "mock-image-id";
+    state.lens.push({ imageId, bytes: file.size });
+    return json(res, { message: "Image uploaded successfully.", image_id: imageId });
+  }
+
   // ----- SerpAPI (Google Images) -----
   if (path === "/search.json") {
     const q = url.searchParams.get("q") ?? "";
@@ -297,28 +310,46 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse, videoF
     state.serp.push({ engine: url.searchParams.get("engine"), q, ijn, apiKey });
     if (url.searchParams.get("engine") === "google_lens") {
       if (apiKey !== "mock-serp-key") return json(res, { error: "Invalid API key. Your API key should be here: https://serpapi.com/manage-api-key" }, 401);
-      // Like the real Lens: fetch the photo from the public address it was given.
-      const photoUrl = url.searchParams.get("url") ?? "";
-      const fetched = await fetch(photoUrl).catch(() => null);
-      const bytes = fetched ? (await fetched.arrayBuffer()).byteLength : 0;
-      state.lens.push({ url: photoUrl, fetchStatus: fetched?.status ?? 0, fetchType: fetched?.headers.get("content-type") ?? null, bytes });
+      if (url.searchParams.get("image_id") !== "mock-image-id") return json(res, { error: "missing image_id" }, 400);
       if (url.searchParams.get("type") !== "visual_matches") return json(res, { error: "wrong type" }, 400);
       const match = (name: string, size: number, page: string) => ({
-        title: "Steel Water Bottle 750ml Stainless Insulated", source: "Good Store", link: page, image: `${MOCK_URL}/img/${name}-${size}x${size}.jpg`, thumbnail: `${MOCK_URL}/img/${name}-100x100.jpg`,
+        title: "Steel Water Bottle 750ml Stainless Insulated", source: "Good Store", link: page,
+        image: `${MOCK_URL}/img/${name}-${size}x${size}.jpg`, image_width: size, image_height: size,
+        thumbnail: `${MOCK_URL}/img/${name}-100x100.jpg`,
       });
       return json(res, {
         visual_matches: [
           match("l1", 1000, `${MOCK_URL}/p/good-1`),
           match("l1", 1000, `${MOCK_URL}/p/good-1`), // the same picture twice
-          { ...match("l2", 1100, `${MOCK_URL}/p/good-2`), image: undefined }, // only a thumbnail
+          { ...match("l2", 1100, `${MOCK_URL}/p/good-2`), image: undefined }, // only a thumbnail, not a picture file
           { ...match("l3", 1000, "https://www.instagram.com/p/bottle") },
           { ...match("l4", 1000, `${MOCK_URL}/p/good-3`), image: "ftp://example.com/not-web.jpg", thumbnail: undefined },
         ],
+        // The products tab is ignored. Only the pictures are used.
         products: [match("l5", 1200, `${MOCK_URL}/p/good-3`)],
       });
     }
     if (apiKey !== "mock-serp-key") return json(res, { error: "Invalid API key. Your API key should be here: https://serpapi.com/manage-api-key" }, 401);
     if (q.includes("noimages") || (ijn && ijn !== "0")) return json(res, { error: "Google hasn't returned any results for this query." });
+    const store = q.includes("site:aliexpress.com") ? "AliExpress" : q.includes("site:alibaba.com") ? "Alibaba" : q.includes("site:amazon.com") ? "Amazon" : "";
+    if (store) {
+      const prefix = store === "AliExpress" ? "ae" : store === "Alibaba" ? "ab" : "az";
+      const picture = (name: string, size: number, page: string) => ({
+        original: `${MOCK_URL}/img/${name}-${size}x${size}.jpg`,
+        original_width: size,
+        original_height: size,
+        title: "Steel Water Bottle 750ml Stainless Insulated",
+        source: store,
+        link: page,
+      });
+      return json(res, {
+        images_results: [
+          picture(`${prefix}1`, 1000, `${MOCK_URL}/p/good-1`),
+          picture(`${prefix}2`, 1100, `${MOCK_URL}/p/good-2`),
+          picture(`${prefix}3`, 1200, `${MOCK_URL}/p/good-3`),
+        ],
+      });
+    }
     const image = (name: string, size: number, page: string, title = "Steel Water Bottle 750ml Stainless Insulated") => ({
       original: `${MOCK_URL}/img/${name}-${size}x${size}.jpg`, original_width: size, original_height: size, title, source: "Good Store", link: page,
     });

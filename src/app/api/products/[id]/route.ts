@@ -26,11 +26,11 @@ export async function PATCH(request: Request, { params }: Params) {
   const product = repo.getProduct(id);
   if (!product) return fail("Product not found", 404);
   if (product.stage !== "listing") return fail("Only products in the Listing tab can be edited here.", 409);
-  if (product.shopify_status === "sending") return fail("This product is being sent to Shopify. Try again when that finishes.", 409);
   if (product.shopify_product_id) return fail("This product is already in Shopify. Edit the draft there.", 409);
+  if (product.shopify_status === "sending") return fail("This product is being sent to Shopify. Try again when that finishes.", 409);
 
   const body = (await request.json().catch(() => null)) as {
-    name?: string; sku?: string; description?: string; price?: string; cost?: string; imageIds?: string[]; videoIds?: string[];
+    name?: string; sku?: string; category?: string; description?: string; price?: string; cost?: string; imageIds?: string[]; videoIds?: string[];
   } | null;
   if (!body) return fail("Invalid request");
 
@@ -57,6 +57,7 @@ export async function PATCH(request: Request, { params }: Params) {
   repo.updateProduct(id, {
     name,
     sku,
+    category: (body.category ?? product.category ?? "").trim() || null,
     description: body.description ?? product.description,
     price: price || null,
     cost: cost || null,

@@ -3,6 +3,7 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { BetaContentBlockParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import * as z from "zod/v4";
 import { aiLimits, config } from "./config";
+import { noteRunningUsage } from "./repo";
 
 /**
  * Every AI call in the app is in this file. It talks to OpenAI or to the Claude API,
@@ -46,6 +47,11 @@ function client(): Anthropic {
 
 // ---------- OpenAI ----------
 
+/** GPT-5 and GPT-6 spend extra output tokens on reasoning unless it is turned off. */
+function reasoningModel(model: string): boolean {
+  return /^gpt-[56]/.test(model);
+}
+
 function explainOpenAiStatus(status: number, text: string): string {
   const detail = (() => {
     try {
@@ -75,8 +81,11 @@ function toOpenAiContent(content: BetaContentBlockParam[]) {
 async function askOpenAi<S extends z.ZodType>(task: string, system: string, schema: S, content: BetaContentBlockParam[]): Promise<z.infer<S>> {
   const key = config.openaiApiKey();
   if (!key) throw new AiError("OPENAI_API_KEY is missing. Add it to .env and restart the app.");
+  const model = config.openaiModel();
   const payload = {
-    model: config.openaiModel(),
+    model,
+    // Luna thinks by default, and those tokens are billed. A title and description do not need that.
+    ...(reasoningModel(model) ? { reasoning_effort: "none" } : {}),
     max_completion_tokens: MAX_TOKENS,
     messages: [
       { role: "system", content: system },
@@ -106,7 +115,12 @@ async function askOpenAi<S extends z.ZodType>(task: string, system: string, sche
     }
     if (!response.ok) throw new AiError(explainOpenAiStatus(response.status, raw));
 
-    const choice = (JSON.parse(raw) as { choices?: { finish_reason?: string; message?: { content?: string; refusal?: string | null } }[] }).choices?.[0];
+    const body = JSON.parse(raw) as {
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
+      choices?: { finish_reason?: string; message?: { content?: string; refusal?: string | null } }[];
+    };
+    noteRunningUsage({ aiInput: body.usage?.prompt_tokens ?? 0, aiOutput: body.usage?.completion_tokens ?? 0 });
+    const choice = body.choices?.[0];
     if (choice?.message?.refusal) throw new AiError(`The AI declined this ${task} request. Try different input or paste other URLs.`);
     answers++;
     if (choice?.finish_reason === "length") {
@@ -187,6 +201,7 @@ async function askClaude<S extends z.ZodType>(task: string, system: string, sche
   } catch (error) {
     throw new AiError(explainApiError(error));
   }
+  noteRunningUsage({ aiInput: response.usage?.input_tokens ?? 0, aiOutput: response.usage?.output_tokens ?? 0 });
   if (response.stop_reason === "refusal") {
     throw new AiError(`The AI declined this ${task} request. Try different input or paste other URLs.`);
   }
@@ -365,6 +380,7 @@ export async function checkVideoFrames(input: {
 const ListingSchema = z.object({
   best_name: z.string(),
   name_options: z.array(z.string()),
+  category: z.string(),
   description: z.string(),
   feature_bullets: z.array(z.string()),
   claims_needing_check: z.array(z.string()),
@@ -373,6 +389,7 @@ const ListingSchema = z.object({
 export interface ListingDraft {
   best_name: string;
   name_options: string[];
+  category: string;
   description: string;
   feature_bullets: string[];
   claims_needing_check: string[];
@@ -385,6 +402,7 @@ export async function writeListing(input: {
   vision: { product_type: string; key_features: string[] } | null;
   sellersToRemove: string[];
   pages: { url: string; title: string; seller: string; text: string }[];
+  images?: VisionImage[];
   avoidPhrases?: string[];
 }): Promise<ListingDraft> {
   const facts = [
@@ -398,23 +416,105 @@ ${input.details}`,
   ]
     .filter(Boolean)
     .join("\n");
-  return ask(
-    "write_listing",
-    `Write store listing text for this product from the facts in the pages.
+  const fromPhoto = Boolean(input.images?.length);
+  const instructions = fromPhoto
+    ? `Look at the user's photo and write the store listing from that photo.
+- best_name: a clean product title for what is shown.
+- name_options: 2 to 4 other good titles.
+- category: a short product category tag of 1 to 3 words, such as "Water bottles".
+- description: 2 to 4 sentences in your own words about what is visible. Plain text only, no markup.
+- feature_bullets: 3 to 7 short feature bullets, each in your own words, without a leading dash. Only features you can see or that the user wrote.
+- claims_needing_check: safety, health, material or performance claims you used that the photo does not prove. Otherwise an empty list.
+Do not invent a price, a quantity, reviews, or ratings. If the user wrote product details, use those facts as well.`
+    : `Write store listing text for this product from the facts in the pages.
 - best_name: a clean, plain product name. Remove store names, promo words and SKU codes. Keep only the manufacturer's brand if it is truly part of the product name.
 - name_options: 2 to 4 other good names.
+- category: a short product category tag of 1 to 3 words, such as "Water bottles" or "Phone cases". No store name.
 - description: 2 to 4 sentences in your own original wording. Never copy phrases from the sources. Plain text only, no markup.
 - feature_bullets: 3 to 7 short feature bullets, each in your own words, without a leading dash.
 - claims_needing_check: every safety, health, material, certification, compliance or performance claim you used that needs confirming, for example "BPA-free", "microwave-safe", "dishwasher-safe" or "FDA approved". Copy each claim's wording exactly as it appears in your description or bullets.
 Do not invent a price or a quantity.
 Never write reviews, ratings, star counts, testimonials, customer counts or best-seller claims. Do not include prices, shipping or return terms.
-If the pages give few facts, write less. Do not invent facts.`,
-    ListingSchema,
-    [
-      {
-        type: "text",
-        text: `${facts || "No extra facts."}\n\nSource pages:\n${input.pages.map(pageBlock).join("\n\n") || "(no source pages were available)"}`,
-      },
-    ],
+If the pages give few facts, write less. Do not invent facts.`;
+  const content: BetaContentBlockParam[] = [];
+  if (input.images?.length) {
+    content.push({ type: "text", text: "The user's product photo:" });
+    content.push(...input.images.map(imageBlock));
+  }
+  content.push({
+    type: "text",
+    text: fromPhoto
+      ? facts || "Write the title and description from the photo."
+      : `${facts || "No extra facts."}\n\nSource pages:\n${input.pages.map(pageBlock).join("\n\n") || "(no source pages were available)"}`,
+  });
+  return ask("write_listing", instructions, ListingSchema, content);
+}
+
+const CreativeSchema = z.object({
+  brand: z.string(),
+  model: z.string(),
+  color: z.string(),
+  packagingText: z.string(),
+  title: z.string(),
+  keywords: z.array(z.string()),
+});
+
+export interface ProductIdentity {
+  brand: string;
+  model: string;
+  color: string;
+  packagingText: string;
+  title: string;
+  keywords: string[];
+}
+
+/** Reads the exact product in a photo: brand, model, color, packaging text, and YouTube searches. */
+export async function identifyProductImage(image: VisionImage): Promise<ProductIdentity> {
+  return ask(
+    "creative_keywords",
+    `Read the exact product in the photo. Do not stop at the product type.
+- brand: the brand printed on the product or the packaging. Use an empty string only when no brand is visible.
+- model: the model, variant, or product line printed on it. Use an empty string when none is visible.
+- color: the main color of the product itself.
+- packagingText: other words on the label or box, such as a size, scent, flavor, or edition. Use an empty string when there are none.
+- title: the exact name a buyer would type. Build it from the brand, model, color, and distinctive packaging text you can actually see. Do not replace a specific name with a generic type such as "water bottle" or "face cream".
+- keywords: exactly 4 short YouTube search phrases that use that exact name. Include "<exact name> review", "<exact name> tiktok made me buy it", one phrase that includes the color, and one phrase in Arabic.
+Use the words you can see. Do not copy the angle-bracket examples.`,
+    CreativeSchema,
+    [{ type: "text", text: "The product photo:" }, imageBlock(image)],
   );
+}
+
+const ThumbnailMatchSchema = z.object({
+  matches: z.array(z.object({ id: z.string(), sameProduct: z.boolean() })),
+});
+
+/**
+ * Compares one product photo with video thumbnails in the same request.
+ * A match has to be the same product, including brand, model, and color.
+ */
+export async function matchProductThumbnails(product: VisionImage, thumbnails: { id: string; data: Buffer }[]): Promise<string[]> {
+  if (!thumbnails.length) return [];
+  const matched: string[] = [];
+  for (let start = 0; start < thumbnails.length; start += 10) {
+    const batch = thumbnails.slice(start, start + 10);
+    const content: BetaContentBlockParam[] = [{ type: "text", text: "The product photo:" }, imageBlock(product)];
+    for (const thumb of batch) {
+      content.push({ type: "text", text: `YouTube thumbnail. Video id: ${thumb.id}` });
+      content.push(imageBlock({ data: thumb.data }));
+    }
+    const result = await ask(
+      "match_thumbnails",
+      `The first image is the product. Each later image is a YouTube thumbnail labeled with a video id.
+sameProduct is true only when the thumbnail shows that same item for sale: the same brand, model, color, and packaging. A different color, a different model, the same category, an ingredient, or a product made from it is not a match.
+Return one row for every video id you were given.`,
+      ThumbnailMatchSchema,
+      content,
+    );
+    const allowed = new Set(batch.map((thumb) => thumb.id));
+    for (const row of result.matches) {
+      if (row.sameProduct && allowed.has(row.id)) matched.push(row.id);
+    }
+  }
+  return matched;
 }

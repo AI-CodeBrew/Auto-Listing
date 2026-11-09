@@ -85,6 +85,42 @@ export function shopifySummary() {
   };
 }
 
+// ---------- Which SerpAPI key is in use ----------
+
+export interface SerpPreference {
+  active: 1 | 2;
+  /** When the active key has no searches left, use the other key. */
+  auto: boolean;
+}
+
+function readSetting(key: string): string {
+  ensureTable();
+  const row = db().prepare("SELECT value FROM settings WHERE key = ?").get(key) as { value: string } | undefined;
+  return row?.value ?? "";
+}
+
+function writeSetting(key: string, value: string): void {
+  ensureTable();
+  db().prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(key, value);
+}
+
+/** Key choice saved in the app. The keys themselves stay in .env and are never stored here. */
+export function serpPreference(): SerpPreference {
+  return {
+    active: readSetting("serp_active") === "2" ? 2 : 1,
+    auto: readSetting("serp_auto") !== "0",
+  };
+}
+
+export function saveSerpPreference(input: Partial<SerpPreference>): SerpPreference {
+  const current = serpPreference();
+  const active = input.active === 1 || input.active === 2 ? input.active : current.active;
+  const auto = typeof input.auto === "boolean" ? input.auto : current.auto;
+  writeSetting("serp_active", String(active));
+  writeSetting("serp_auto", auto ? "1" : "0");
+  return { active, auto };
+}
+
 // ---------- Public link to the uploaded photo (for Google Lens) ----------
 
 /** A random secret made once and kept in the database. It signs the public photo links. */
@@ -104,6 +140,13 @@ export function photoToken(productId: string): string {
 export function photoTokenValid(productId: string, token: string): boolean {
   if (!/^[a-f0-9]{64}$/.test(token)) return false;
   return timingSafeEqual(Buffer.from(photoToken(productId)), Buffer.from(token));
+}
+
+// ---------- FastMoss ----------
+
+/** The FastMoss key lives only in .env. It is never entered or shown in the app. */
+export function fastmossApiKey(): string {
+  return (process.env.FASTMOSS_API_KEY ?? "").trim();
 }
 
 /** The public address Google Lens uses to fetch the product's uploaded photo. Empty if no tunnel is set up. */

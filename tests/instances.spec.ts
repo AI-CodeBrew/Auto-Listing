@@ -142,6 +142,7 @@ test("the Shopify page saves details, hides the secret and tests the connection"
   const app = await startApp("shopify-page", PORT, { SHOPIFY_STORE_DOMAIN: "", SHOPIFY_CLIENT_ID: "", SHOPIFY_CLIENT_SECRET: "" });
   try {
     await page.goto(`${BASE}/shopify`);
+    await page.getByRole("button", { name: "Shopify" }).click();
     await expect(page.getByTestId("shopify-connection-state")).toHaveText("Not connected");
     await expect(page.getByTestId("shopify-test")).toBeDisabled();
 
@@ -202,10 +203,11 @@ test.describe("Google Images through SerpAPI", () => {
       expect(state.searches).toEqual([]); // Bing is not used.
       expect(state.ai.filter((call) => call.task === "same_product")).toEqual([]); // No page was compared.
 
-      // The good pictures passed. The watermarked one failed. The tiny one and the Instagram one were never downloaded.
+      // Pictures are kept without a watermark check. The tiny one and the Instagram one are still skipped.
       const sources: string[] = result.images.map((image: any) => String(image.source_url ?? ""));
       expect(result.images.filter((image: any) => image.passed).length).toBeGreaterThanOrEqual(3);
-      expect(result.images.find((image: any) => image.source_url?.includes("watermark9")).reason).toContain("watermark");
+      expect(result.images.find((image: any) => image.source_url?.includes("watermark9")).passed).toBe(true);
+      expect(state.ai.filter((call) => call.task === "check_image")).toEqual([]);
       expect(sources.some((url) => url.includes("tiny"))).toBe(false);
       expect(sources.some((url) => url.includes("insta"))).toBe(false);
 
@@ -244,30 +246,28 @@ test.describe("Google Images through SerpAPI", () => {
   });
 });
 
-test.describe("Google Lens with a public photo link", () => {
+test.describe("Google Lens from the uploaded photo", () => {
   const lensEnv = { SERPAPI_KEY: "mock-serp-key", SERPAPI_BASE_URL_OVERRIDE: MOCK_URL, PUBLIC_BASE_URL: BASE };
 
-  test("an uploaded photo is sent to Lens by a signed public link, and the matches are checked", async ({ request }) => {
+  test("an uploaded photo is sent to Lens, and only the matching pictures are saved", async ({ request }) => {
     const app = await startApp("lens", PORT, lensEnv);
     try {
       const id = await createProduct(request, { file: IMAGE_FILE, details: "Stainless steel bottle, 750 ml, leak-proof, matte black." }, BASE);
       const result = await waitForStage(request, id, "review", BASE);
       const state = await mockState();
 
-      // Lens got a public link and could really fetch the photo from it.
+      // The photo file itself was uploaded. No public link is required.
       expect(state.lens).toHaveLength(1);
-      expect(state.lens[0].url).toMatch(new RegExp(`^${BASE}/api/public-photo/${id}/[a-f0-9]{64}\\.jpg$`));
-      expect(state.lens[0].fetchStatus).toBe(200);
-      expect(state.lens[0].fetchType).toBe("image/jpeg");
+      expect(state.lens[0].imageId).toBe("mock-image-id");
       expect(state.lens[0].bytes).toBeGreaterThan(1000);
 
-      // Visual matches and products were merged, de-duplicated and filtered. Only 2 passed, so one Google Images search filled the gap.
-      expect(state.serp.map((call) => call.engine)).toEqual(["google_lens", "google_images"]);
-      const sources: string[] = result.images.map((image: any) => String(image.source_url ?? ""));
-      expect(sources.filter((url) => url.includes("/l1-"))).toHaveLength(1);
-      expect(sources.some((url) => url.includes("/l5-"))).toBe(true);
-      expect(sources.some((url) => url.includes("/l3-") || url.includes("/l4-"))).toBe(false); // Instagram page, and a non-web link.
-      expect(result.images.filter((image: any) => !image.uploaded && image.passed).length).toBeGreaterThanOrEqual(2);
+      // One Lens search. The pictures are saved and the product pages are not opened.
+      expect(state.serp.map((call) => call.engine)).toEqual(["google_lens"]);
+      const storeImages = result.images.filter((image: any) => !image.uploaded);
+      expect(storeImages.every((image: any) => !image.source_page)).toBe(true);
+      expect(storeImages.length).toBeGreaterThan(0);
+      expect(storeImages.length).toBeLessThanOrEqual(20);
+      expect(storeImages.filter((image: any) => image.passed).length).toBeGreaterThanOrEqual(2);
 
       // The store owner's details reached the writer as the main source.
       const writer = state.ai.find((call) => call.task === "write_listing")!;
@@ -275,7 +275,7 @@ test.describe("Google Lens with a public photo link", () => {
       expect(result.product.input_details).toBe("Stainless steel bottle, 750 ml, leak-proof, matte black.");
       expect(result.product.warnings.join(" ")).not.toContain("Lens");
 
-      // Through the tunnel only the signed photo link answers. Everything else is hidden.
+      // A public tunnel does not expose the app. The photo search does not need one.
       const publicGet = (urlPath: string, headers: Record<string, string>) =>
         new Promise<{ status: number; type: string | undefined }>((resolve, reject) => {
           http.get({ host: "localhost", port: PORT, path: urlPath, headers }, (res) => {
@@ -283,10 +283,7 @@ test.describe("Google Lens with a public photo link", () => {
             res.on("end", () => resolve({ status: res.statusCode ?? 0, type: res.headers["content-type"] }));
           }).on("error", reject);
         });
-      const photoPath = new URL(state.lens[0].url).pathname;
       const tunnelHost = { host: "example.trycloudflare.com" };
-      expect(await publicGet(photoPath, tunnelHost)).toEqual({ status: 200, type: "image/jpeg" });
-      expect((await publicGet(photoPath.replace(/[a-f0-9]\.jpg$/, "0.jpg"), tunnelHost)).status).toBe(404); // wrong secret
       expect((await publicGet("/api/status", tunnelHost)).status).toBe(404);
       expect((await publicGet("/api/products", tunnelHost)).status).toBe(404);
       expect((await publicGet("/new", tunnelHost)).status).toBe(404);
@@ -299,30 +296,30 @@ test.describe("Google Lens with a public photo link", () => {
     }
   });
 
-  test("without PUBLIC_BASE_URL, Lens is skipped with a warning and Google Images is used", async ({ request }) => {
+  test("without a public URL, the photo is still uploaded to Lens", async ({ request }) => {
     const app = await startApp("lens-off", PORT, { ...lensEnv, PUBLIC_BASE_URL: "" });
     try {
       const id = await createProduct(request, { file: IMAGE_FILE }, BASE);
       const result = await waitForStage(request, id, "review", BASE);
       const state = await mockState();
-      expect(state.lens).toEqual([]);
-      expect(state.serp.every((call) => call.engine === "google_images")).toBe(true);
-      expect(result.product.warnings.join(" ")).toContain("PUBLIC_BASE_URL");
+      expect(state.lens).toHaveLength(1);
+      expect(state.serp.map((call) => call.engine)).toEqual(["google_lens"]);
+      expect(result.product.warnings.join(" ")).not.toContain("PUBLIC_BASE_URL");
       expect(result.images.filter((image: any) => !image.uploaded && image.passed).length).toBeGreaterThanOrEqual(2);
     } finally {
       killApp(app);
     }
   });
 
-  test("a tunnel that is not running is noticed before any SerpAPI search is spent", async ({ request }) => {
+  test("a dead public URL does not block the photo upload", async ({ request }) => {
     const app = await startApp("lens-down", PORT, { ...lensEnv, PUBLIC_BASE_URL: "http://127.0.0.1:4199" });
     try {
       const id = await createProduct(request, { file: IMAGE_FILE }, BASE);
       const result = await waitForStage(request, id, "review", BASE);
       const state = await mockState();
-      expect(state.lens).toEqual([]);
-      expect(state.serp.some((call) => call.engine === "google_lens")).toBe(false);
-      expect(result.product.warnings.join(" ")).toContain("could not be reached");
+      expect(state.lens).toHaveLength(1);
+      expect(state.serp.map((call) => call.engine)).toEqual(["google_lens"]);
+      expect(result.product.warnings.join(" ")).not.toContain("could not be reached");
     } finally {
       killApp(app);
     }

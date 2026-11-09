@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { config } from "./config";
+import { scheduleSupabaseSync, startSupabaseSync } from "./supabase";
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS products (
@@ -9,8 +10,11 @@ CREATE TABLE IF NOT EXISTS products (
   stage TEXT NOT NULL,
   input_name TEXT,
   input_image TEXT,
+  input_images TEXT NOT NULL DEFAULT '[]',
   input_video TEXT,
   input_urls TEXT NOT NULL DEFAULT '[]',
+  search_photos INTEGER NOT NULL DEFAULT 1,
+  search_videos INTEGER NOT NULL DEFAULT 1,
   blocked_urls TEXT NOT NULL DEFAULT '[]',
   vision TEXT,
   name TEXT,
@@ -42,6 +46,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   message TEXT,
   log TEXT NOT NULL DEFAULT '[]',
   skip_search INTEGER NOT NULL DEFAULT 0,
+  usage TEXT NOT NULL DEFAULT '{}',
   attempts INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
@@ -92,11 +97,39 @@ CREATE TABLE IF NOT EXISTS videos (
   uploaded INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS creative_cache (
+  cache_key TEXT PRIMARY KEY,
+  payload TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
 `;
 
 // Next can load this module more than once (per route bundle), so the
 // connection lives on globalThis.
 const holder = globalThis as unknown as { __plaDb?: Database.Database };
+
+/** The connection survives a reload, so this flag lives with the module and runs the new columns again. */
+let migrated = false;
+
+function migrate(conn: Database.Database): void {
+  const addColumn = (table: string, name: string, definition: string) => {
+    const columns = conn.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (!columns.some((column) => column.name === name)) conn.exec(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
+  };
+  // Columns added after the first release. CREATE TABLE does not alter a database that already exists.
+  addColumn("products", "input_details", "input_details TEXT");
+  addColumn("products", "input_images", "input_images TEXT NOT NULL DEFAULT '[]'");
+  addColumn("products", "search_photos", "search_photos INTEGER NOT NULL DEFAULT 1");
+  addColumn("products", "search_videos", "search_videos INTEGER NOT NULL DEFAULT 1");
+  addColumn("jobs", "usage", "usage TEXT NOT NULL DEFAULT '{}'");
+  addColumn("products", "category", "category TEXT");
+  conn.exec(`CREATE TABLE IF NOT EXISTS creative_cache (
+    cache_key TEXT PRIMARY KEY,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`);
+  migrated = true;
+}
 
 export function db(): Database.Database {
   if (!holder.__plaDb) {
@@ -107,10 +140,39 @@ export function db(): Database.Database {
     conn.pragma("foreign_keys = ON");
     conn.pragma("busy_timeout = 5000");
     conn.exec(SCHEMA);
-    // Columns added after the first release.
-    const columns = conn.prepare("PRAGMA table_info(products)").all() as { name: string }[];
-    if (!columns.some((column) => column.name === "input_details")) conn.exec("ALTER TABLE products ADD COLUMN input_details TEXT");
+    watchWrites(conn);
     holder.__plaDb = conn;
+    startSupabaseSync((table) => readTable(conn, table));
   }
+  if (!migrated) migrate(holder.__plaDb);
   return holder.__plaDb;
+}
+
+const SYNC_TABLES = new Set(["products", "jobs", "sources", "images", "videos", "settings", "counters"]);
+
+function readTable(conn: Database.Database, table: string): Record<string, unknown>[] {
+  if (!SYNC_TABLES.has(table)) return [];
+  const exists = conn.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table);
+  if (!exists) return [];
+  return conn.prepare(`SELECT * FROM ${table}`).all() as Record<string, unknown>[];
+}
+
+/** A local write is copied to Supabase. Reads stay on this computer, so a slow copy never blocks the page. */
+function watchWrites(conn: Database.Database): void {
+  const prepare = conn.prepare.bind(conn);
+  conn.prepare = ((sql: string) => {
+    const stmt = prepare(sql);
+    const run = stmt.run.bind(stmt);
+    stmt.run = ((...args: Parameters<typeof stmt.run>) => {
+      const result = run(...args);
+      scheduleSupabaseSync();
+      return result;
+    }) as typeof stmt.run;
+    return stmt;
+  }) as typeof conn.prepare;
+  const exec = conn.exec.bind(conn);
+  conn.exec = ((sql: string) => {
+    exec(sql);
+    if (!sql.includes("PRAGMA")) scheduleSupabaseSync();
+  }) as typeof conn.exec;
 }

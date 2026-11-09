@@ -1,12 +1,14 @@
 import fs from "node:fs";
 import * as ai from "../ai";
-import { aiLimits, config, LIMITS } from "../config";
-import { DUPLICATE_DISTANCE, downloadImage, forVision, hammingDistance, inspectImageFile } from "../media/images";
+import { config, LIMITS } from "../config";
+import { DUPLICATE_DISTANCE, downloadImage, forVision, hammingDistance, inspectImageFile, jpegForLens } from "../media/images";
 import { downloadVideo, extractFrames } from "../media/videos";
 import * as repo from "../repo";
 import { getSearchProvider } from "../search";
-import { lensSearch, searchImages, type ImageHit } from "../search/serpapi";
-import { publicPhotoUrl } from "../settings";
+import { searchVideos, type FastMossVideo } from "../search/fastmoss";
+import { marketplaceOfHit } from "../search/marketplaces";
+import { lensSearch, searchImages, uploadLensImage, type ImageHit } from "../search/serpapi";
+import { fastmossApiKey } from "../settings";
 import { clearResearchFiles, ensureDirs, mediaPath } from "../storage";
 import { chooseBestImages, findCopiedPhrases, finalizeListing } from "./text";
 import type { Job, Product, ProductImage, VisionResult } from "../types";
@@ -43,6 +45,8 @@ interface RunState {
   blockedPages: { url: string; reason: string }[];
   /** Google Images results that were looked at, by image URL. */
   searchHits: Map<string, ImageHit>;
+  /** Videos returned by FastMoss for this product. */
+  fastmoss: FastMossVideo[];
 }
 
 const PASTE_URLS_MESSAGE = "Paste product page URLs below to continue without searching.";
@@ -50,6 +54,7 @@ const PASTE_URLS_MESSAGE = "Paste product page URLs below to continue without se
 export async function runResearch(job: Job): Promise<void> {
   let product = repo.getProduct(job.product_id);
   if (!product) throw new Error("Product no longer exists");
+  repo.setUsage(job.id, repo.emptyUsage());
   const step = (text: string) => repo.setJobStep(job.id, text);
 
   await ai.aiPreflight();
@@ -57,7 +62,7 @@ export async function runResearch(job: Job): Promise<void> {
   // Web results start clean each run, so a job resumed after a restart cannot double them up.
   repo.resetResearch(product.id);
   repo.updateProduct(product.id, { stage: "researching" });
-  clearResearchFiles(product.id, [product.input_image, product.input_video].filter((f): f is string => Boolean(f)));
+  clearResearchFiles(product.id, [product.input_image, product.input_video, ...product.input_images].filter((f): f is string => Boolean(f)));
   ensureDirs(product.id);
   product = repo.getProduct(product.id)!;
 
@@ -76,17 +81,25 @@ export async function runResearch(job: Job): Promise<void> {
     searchBlock: null,
     blockedPages: [],
     searchHits: new Map(),
+    fastmoss: [],
   };
 
   await prepareInputs(state, step);
   const keywords = keywordsFor(state);
   const query = keywords.join(" ").trim();
 
-  // With a SerpAPI key, images come straight from Google Images and only a few pages are
-  // opened, for their text. Without one, pages are searched, opened and compared.
-  const imageMode = Boolean(config.serpApiKey()) && !job.skip_search && Boolean(query);
+  // Photos and videos are chosen separately. Photos use SerpAPI when a key is set, and the
+  // page search otherwise. Videos use FastMoss when a key is saved.
+  const wantPhotos = product.search_photos;
+  const wantVideos = product.search_videos;
+  const imageMode = wantPhotos && Boolean(config.serpApiKey()) && !job.skip_search && (Boolean(query) || Boolean(product.input_image));
 
-  if (imageMode) {
+  if (!wantPhotos) {
+    state.warnings.push("Photo search was turned off, so no pictures were searched.");
+    const pasted = filterProductUrls(product.input_urls, state.seenPages);
+    for (const item of pasted.dropped) repo.addSource(product.id, { url: item.url, status: "rejected", reason: item.reason });
+    if (pasted.keep.length) await visitPages(state, pasted.keep.slice(0, LIMITS.pagesPerTry), step);
+  } else if (imageMode) {
     await runImageSearch(state, query, step);
   } else {
     let tries = 0;
@@ -102,6 +115,8 @@ export async function runResearch(job: Job): Promise<void> {
     }
   }
 
+  if (wantVideos) await searchFastMoss(state, query, step);
+
   // Blocks only stop the job when they leave nothing to work with.
   if (!imageMode && !state.accepted.length && (state.blockedPages.length || state.searchBlock)) {
     const parts = [state.searchBlock, state.blockedPages.length && `${describeBlockedSites(state)} showed a CAPTCHA or bot block.`].filter(Boolean);
@@ -111,10 +126,10 @@ export async function runResearch(job: Job): Promise<void> {
   if (state.blockedPages.length) state.warnings.push(`These sites blocked automated access, so their pages were skipped: ${describeBlockedSites(state)}.`);
 
   const passed = passedImageCount(product.id);
-  const lowImages = passed < LIMITS.targetImages;
-  if (!imageMode && !state.accepted.length) state.warnings.push("No matching product pages were found. Check the text carefully, or use Search Again with pasted URLs.");
+  const lowImages = wantPhotos && passed < LIMITS.targetImages;
+  if (wantPhotos && !imageMode && !state.accepted.length) state.warnings.push("No matching product pages were found. Check the text carefully, or use Search Again with pasted URLs.");
 
-  step("Writing the product name and description");
+  step(product.input_image ? "Writing the title and description from your photo" : "Writing the product name, category and description");
   const text = await writeText(state);
 
   // Preselect the best images in ranked order.
@@ -127,14 +142,19 @@ export async function runResearch(job: Job): Promise<void> {
     stage: "review",
     name: text.name,
     name_options: text.nameOptions,
+    category: text.category || visionCategory(state),
     description: text.description,
     claims: text.claims,
-    source_text: state.accepted.map((page) => `From ${page.seller} (${page.url}):\n${page.text}`).join("\n\n---\n\n") || null,
+    source_text: [
+      state.accepted.map((page) => `From ${page.seller} (${page.url}):\n${page.text}`).join("\n\n---\n\n"),
+      state.fastmoss.map((video) => `FastMoss video: ${video.title || video.url}${video.creator ? ` by ${video.creator}` : ""} (${video.url})`).join("\n"),
+    ].filter(Boolean).join("\n\n---\n\n") || null,
     seller_name: state.accepted[0]?.seller ?? null,
     low_images: lowImages,
     warnings: state.warnings,
     vision: state.vision,
   });
+  repo.archiveOtherReviews(product.id);
 }
 
 /** Limits for image mode. Each image checked is one AI call, so these keep the cost down. */
@@ -143,55 +163,48 @@ const IMAGE_CHECKS_PER_SEARCH_PAGE = 25;
 const IMAGE_SEARCH_STOP_AT = 8;
 const TEXT_PAGES_TO_TRY = 5;
 
-/** Finds pictures like the user's uploaded photo with Google Lens. Returns nothing, with a warning, if that is not possible. */
+/** Sends the user's photo to Google Lens and returns the matching pictures. */
 async function lensMatches(state: RunState, step: (text: string) => void): Promise<ImageHit[]> {
   const { product } = state;
   if (!product.input_image) return [];
 
-  const url = publicPhotoUrl(product.id);
-  if (!url) {
-    state.warnings.push("Google Lens was not used, because PUBLIC_BASE_URL is not set in .env. The pictures come from a normal Google Images search instead. See the README, section \"Google Lens\".");
-    return [];
-  }
-
-  // Check the link before spending a SerpAPI search on it.
-  step("Checking that Google can reach your photo");
+  step("Sending your photo to Google Lens");
   try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-    const type = response.headers.get("content-type") ?? "";
-    await response.body?.cancel();
-    if (!response.ok || !type.startsWith("image/")) throw new Error(`HTTP ${response.status}`);
-  } catch {
-    state.warnings.push(`Google Lens was not used, because your photo could not be reached at ${config.publicBaseUrl()}. Is the tunnel running, and does PUBLIC_BASE_URL match it? The pictures come from a normal Google Images search instead.`);
+    const jpeg = await jpegForLens(mediaPath(product.id, "images", product.input_image));
+    const imageId = await uploadLensImage(jpeg);
+    const hits = await lensSearch(imageId);
+    if (!hits.length) state.warnings.push("Google Lens found no pictures that match your photo.");
+    return hits;
+  } catch (error) {
+    state.warnings.push(`Google Lens could not search your photo: ${error instanceof Error ? error.message : String(error)}`);
     return [];
   }
-
-  step("Finding similar pictures with Google Lens");
-  const hits = await lensSearch(url);
-  if (!hits.length) state.warnings.push("Google Lens found no similar pictures. The pictures come from a normal Google Images search instead.");
-  return hits;
 }
 
 /** Downloads and checks pictures from search results, best first, until enough have passed. */
-async function checkHits(state: RunState, hits: ImageHit[], step: (text: string) => void): Promise<void> {
+async function checkHits(state: RunState, hits: ImageHit[], step: (text: string) => void, stopAt = IMAGE_SEARCH_STOP_AT): Promise<void> {
   const { product } = state;
+  const tryLimit = stopAt > IMAGE_SEARCH_STOP_AT ? stopAt : IMAGE_CHECKS_PER_SEARCH_PAGE;
   let tried = 0;
   for (const hit of hits) {
-    if (tried >= IMAGE_CHECKS_PER_SEARCH_PAGE || passedImageCount(product.id) >= IMAGE_SEARCH_STOP_AT) break;
+    if (tried >= tryLimit) break;
+    if (stopAt <= IMAGE_SEARCH_STOP_AT && passedImageCount(product.id) >= stopAt) break;
     const page = hit.pageUrl || hit.original;
-    if (state.seenMedia.has(hit.original) || exclusionReason(page)) continue; // Social media and blog pages are skipped.
-    if (hit.width && hit.height && (hit.width < LIMITS.imageMinSide || hit.height < LIMITS.imageMinSide)) continue;
+    if (state.seenMedia.has(hit.original)) continue;
+    // Lens results are the picture itself. Page rules apply only when a page is being opened.
+    if (!hit.imageOnly && exclusionReason(page)) continue;
+    if (!hit.imageOnly && hit.width && hit.height && (hit.width < LIMITS.imageMinSide || hit.height < LIMITS.imageMinSide)) continue;
     state.searchHits.set(hit.original, hit);
     tried++;
-    step(`Checking image ${tried} (${safeDomain(page)})`);
-    await processImage(state, [hit.original], page);
+    step(`Checking image ${tried} (${hit.imageOnly ? "Google Lens" : marketplaceOfHit(hit)?.label || safeDomain(page)})`);
+    // SerpAPI already returned this picture file, so it is saved even when the host's robots.txt would block a crawl.
+    await processImage(state, [hit.original], hit.imageOnly ? "" : page, { skipRobots: Boolean(hit.imageOnly || marketplaceOfHit(hit)), skipAi: Boolean(hit.imageOnly) });
   }
 }
 
 /**
- * Image mode: Google Lens (for an uploaded photo) and Google Images, both through SerpAPI, give the pictures. The AI checks each one
- * (clear, right product, no watermark). The pages of the best pictures are then opened,
- * only to read their text, which the AI uses to write the name and description.
+ * Image mode. An uploaded photo is matched with Google Lens, and only those pictures are saved.
+ * A name with no photo still uses Google Images, then the pages of the best pictures are read for the description.
  */
 async function runImageSearch(state: RunState, query: string, step: (text: string) => void): Promise<void> {
   const { product } = state;
@@ -201,25 +214,26 @@ async function runImageSearch(state: RunState, query: string, step: (text: strin
   for (const item of pasted.dropped) repo.addSource(product.id, { url: item.url, status: "rejected", reason: item.reason });
   if (pasted.keep.length) await visitPages(state, pasted.keep.slice(0, LIMITS.pagesPerTry), step);
 
-  // The best source: pictures that look like the user's photo (Google Lens).
-  const lens = await lensMatches(state, step);
-  if (lens.length) await checkHits(state, lens, step);
+  // An uploaded photo is matched like a Google image search: the pictures, not the product pages.
+  if (product.input_image) {
+    const photos = await lensMatches(state, step);
+    if (photos.length) {
+      step(`Saving ${photos.length} matching photo${photos.length === 1 ? "" : "s"} from Google Lens`);
+      await checkHits(state, photos, step, Math.max(photos.length, IMAGE_SEARCH_STOP_AT + 1));
+    }
+    return;
+  } else {
+    const pages = IMAGE_SEARCH_PAGES;
+    for (let pageIndex = 0; pageIndex < pages && passedImageCount(product.id) < LIMITS.targetImages; pageIndex++) {
+      step(pageIndex === 0 ? `Searching Google Images for "${query}"` : `Fewer than ${LIMITS.targetImages} images passed. Searching Google Images for "${query}" (page ${pageIndex + 1})`);
+      const hits = await searchImages(query, pageIndex);
+      if (!hits.length) break;
+      await checkHits(state, hits, step);
+    }
 
-  // A plain Google Images search fills the gap, or does all the work when Lens was not possible.
-  const pages = lens.length ? 1 : IMAGE_SEARCH_PAGES;
-  for (let pageIndex = 0; pageIndex < pages && passedImageCount(product.id) < LIMITS.targetImages; pageIndex++) {
-    step(
-      pageIndex === 0 && !lens.length
-        ? `Searching Google Images for "${query}"`
-        : `Fewer than ${LIMITS.targetImages} images passed. Searching Google Images for "${query}" (page ${pageIndex + 1})`,
-    );
-    const hits = await searchImages(query, pageIndex);
-    if (!hits.length) break;
-    await checkHits(state, hits, step);
-  }
-
-  if (!state.searchHits.size && !state.accepted.length) {
-    throw new JobBlocked(`Google Images found no usable pictures for "${query}". ${PASTE_URLS_MESSAGE}`, []);
+    if (!state.searchHits.size && !state.accepted.length) {
+      throw new JobBlocked(`Google Images found no usable pictures for "${query}". ${PASTE_URLS_MESSAGE}`, []);
+    }
   }
 
   // Text for the description: the pages of the best pictures, opened without comparing them.
@@ -272,14 +286,21 @@ async function prepareInputs(state: RunState, step: (text: string) => void): Pro
   if (product.input_image) {
     const file = mediaPath(product.id, "images", product.input_image);
     state.reference = [{ data: await forVision(file) }];
-    if (state.vision) {
-      step("Using the earlier analysis of your image");
-    } else {
-      step("Analyzing your image");
-      state.vision = await ai.analyzeProductImages(state.reference, product.input_name);
-      repo.updateProduct(product.id, { vision: state.vision });
+    // With SerpAPI the photo is the search. GPT looks at it once, later, to write the title and description.
+    const lensPhoto = Boolean(config.serpApiKey()) && product.search_photos && !state.job.skip_search;
+    if (!lensPhoto) {
+      if (state.vision) {
+        step("Using the earlier analysis of your image");
+      } else {
+        step("Analyzing your image");
+        state.vision = await ai.analyzeProductImages(state.reference, product.input_name);
+        repo.updateProduct(product.id, { vision: state.vision });
+      }
     }
     await checkUploadedImage(state, product.input_image);
+    for (const extra of product.input_images ?? []) {
+      if (extra !== product.input_image) await checkUploadedImage(state, extra);
+    }
   }
 
   if (product.input_video) {
@@ -316,8 +337,8 @@ async function prepareInputs(state: RunState, step: (text: string) => void): Pro
 /** Checks the user's own image once. Later runs keep the result from the first check. */
 async function checkUploadedImage(state: RunState, fileName: string): Promise<void> {
   const { product } = state;
-  const existing = repo.listImages(product.id).find((image) => image.uploaded);
-  if (existing && (existing.checks.aiChecked || existing.reason)) return;
+  const existing = repo.listImages(product.id).find((image) => image.uploaded && image.file_name === fileName);
+  if (existing && (existing.checks.aiChecked || existing.passed || existing.reason)) return;
 
   const info = await inspectImageFile(product.id, fileName);
   const tooSmall = info.width < LIMITS.imageMinSide || info.height < LIMITS.imageMinSide;
@@ -340,7 +361,8 @@ async function checkUploadedImage(state: RunState, fileName: string): Promise<vo
   if (tooSmall) {
     repo.updateImageCheck(row.id, false, `Too small: ${info.width}x${info.height} (minimum ${LIMITS.imageMinSide}x${LIMITS.imageMinSide})`, row.checks);
   } else {
-    await aiCheckImage(state, row);
+    // The photo was already sent once, to learn what to search for. It is not sent again.
+    repo.updateImageCheck(row.id, true, null, { ...row.checks, minSize: true, aiChecked: false });
   }
 }
 
@@ -434,12 +456,15 @@ async function visitPages(state: RunState, urls: string[], step: (text: string) 
     state.accepted.push(data);
 
     // In text-only mode the pictures already came from Google Images.
-    if (options.verify) {
+    if (options.verify && state.product.search_photos) {
       step(`Downloading images from ${label}`);
       await collectImages(state, data);
     }
-    step(`Checking videos from ${label}`);
-    await collectVideos(state, data);
+    // With a FastMoss key, videos come from FastMoss rather than from these pages.
+    if (state.product.search_videos && !fastmossApiKey()) {
+      step(`Checking videos from ${label}`);
+      await collectVideos(state, data);
+    }
   }
 }
 
@@ -451,12 +476,12 @@ async function collectImages(state: RunState, page: PageData): Promise<void> {
 /**
  * Downloads one picture (the first of these URLs that works), runs the code checks, then the AI check.
  */
-async function processImage(state: RunState, candidateUrls: string[], sourcePage: string): Promise<void> {
+async function processImage(state: RunState, candidateUrls: string[], sourcePage: string, options?: { skipRobots?: boolean; skipAi?: boolean }): Promise<void> {
   const productId = state.product.id;
   const urls: string[] = [];
   for (const url of candidateUrls) {
     if (state.seenMedia.has(url)) continue;
-    if (await isAllowedByRobots(url).catch(() => false)) urls.push(url);
+    if (options?.skipRobots || (await isAllowedByRobots(url).catch(() => false))) urls.push(url);
   }
   if (!urls.length) return;
   urls.forEach((url) => state.seenMedia.add(url));
@@ -480,7 +505,7 @@ async function processImage(state: RunState, candidateUrls: string[], sourcePage
 
   // Code checks: minimum size and perceptual duplicates.
   const minSize = width >= LIMITS.imageMinSide && height >= LIMITS.imageMinSide;
-  if (!minSize) {
+  if (!minSize && !options?.skipAi) {
     repo.updateImageCheck(row.id, false, `Too small: ${width}x${height} (minimum ${LIMITS.imageMinSide}x${LIMITS.imageMinSide})`, { ...row.checks, minSize: false });
     return;
   }
@@ -497,46 +522,49 @@ async function processImage(state: RunState, candidateUrls: string[], sourcePage
   for (const twin of twins) {
     repo.updateImageCheck(twin.id, false, `Duplicate of a larger image`, { ...twin.checks, duplicate: true });
   }
-  await aiCheckImage(state, { ...row, checks: { ...row.checks, minSize: true } });
+  // Size and duplicates only. Watermark and the other photo checks are off so the results come back fast.
+  repo.updateImageCheck(row.id, true, null, { ...row.checks, minSize: true, aiChecked: false });
 }
 
-/** Vision AI checks for one image that already passed the code checks. */
-async function aiCheckImage(state: RunState, row: ProductImage): Promise<void> {
-  const passedSoFar = passedImageCount(state.product.id);
-  const limits = aiLimits();
-  if (state.aiChecks >= limits.maxImagesToAiCheck || passedSoFar >= limits.stopCheckingAfterPasses) {
-    repo.updateImageCheck(row.id, false, "Not checked: enough images were already found", { ...row.checks, minSize: true });
+/** Looks up TikTok videos of this product on FastMoss. A missing key does not fail the job. */
+async function searchFastMoss(state: RunState, query: string, step: (text: string) => void): Promise<void> {
+  if (!fastmossApiKey()) {
+    state.warnings.push("Video setup is not integrated yet.");
     return;
   }
-  state.aiChecks++;
-  const file = mediaPath(state.product.id, "images", row.file_name!);
-  const result = await ai.checkImage({
-    image: { data: await forVision(file) },
-    // The user's own upload is the reference, so it is not compared with itself.
-    reference: row.uploaded ? [] : state.reference,
-    name: state.product.input_name,
-    productType: state.vision?.product_type ?? null,
-    sourceUrl: row.source_url ?? "user upload",
-  });
-  const correct = row.uploaded ? true : result.correct_product;
-  const failures = [
-    !result.clear && "not clear",
-    !correct && "wrong product",
-    !result.no_watermark && "has a watermark",
-    !result.no_other_brand_logo && "shows another brand's logo",
-  ].filter(Boolean);
-  const passed = failures.length === 0;
-  repo.updateImageCheck(row.id, passed, passed ? null : [failures.join(", "), result.reason].filter(Boolean).join(": "), {
-    ...row.checks,
-    minSize: true,
-    aiChecked: true,
-    clear: result.clear,
-    correctProduct: correct,
-    noWatermark: result.no_watermark,
-    noOtherBrandLogo: result.no_other_brand_logo,
-    quality: result.quality,
-    note: result.reason || undefined,
-  });
+  if (!query) {
+    state.warnings.push("Video search was skipped because there is no product name to search for.");
+    return;
+  }
+  step(`Searching FastMoss for videos of "${query}"`);
+  try {
+    const hits = await searchVideos(query);
+    state.fastmoss = hits;
+    if (!hits.length) {
+      state.warnings.push(`FastMoss found no videos for "${query}".`);
+      return;
+    }
+    hits.forEach((hit, index) => {
+      const classified = classifyVideo(hit.url);
+      const provider = classified?.kind === "link" ? classified.provider : "fastmoss";
+      const attachable = provider === "youtube" || provider === "vimeo";
+      repo.addVideo({
+        product_id: state.product.id,
+        kind: "link",
+        provider,
+        url: classified?.url ?? hit.url,
+        file_name: null,
+        source_page: hit.pageUrl || null,
+        bytes: null,
+        passed: true,
+        reason: attachable ? null : "Link only. Shopify can attach YouTube and Vimeo links, not this one.",
+        selected: index < 5,
+        uploaded: false,
+      });
+    });
+  } catch (error) {
+    state.warnings.push(`FastMoss video search failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 /** Step 8. */
@@ -595,9 +623,26 @@ async function collectVideos(state: RunState, page: PageData): Promise<void> {
   }
 }
 
+function visionCategory(state: RunState): string | null {
+  const type = state.vision?.product_type?.replace(/\s+/g, " ").trim();
+  return type ? type.slice(0, 60) : null;
+}
+
 /** Step 9. */
 async function writeText(state: RunState) {
   const { product, accepted, vision } = state;
+  // An uploaded photo is the only thing GPT sees. Found pictures and their pages are not included.
+  if (product.input_image && state.reference.length && config.serpApiKey() && product.search_photos) {
+    const draft = await ai.writeListing({
+      name: product.input_name,
+      details: product.input_details,
+      vision: null,
+      sellersToRemove: [],
+      pages: [],
+      images: state.reference.slice(0, 1),
+    });
+    return finalizeListing(draft, [], product.input_name || vision?.product_type || "Untitled product");
+  }
   const sellers = [...new Set(accepted.flatMap((page) => [page.seller, safeDomain(page.url)]))].filter(Boolean);
   const pages = accepted.slice(0, LIMITS.pagesPerTry).map((page) => ({ url: page.url, title: page.title, seller: page.seller, text: page.text }));
 
@@ -608,6 +653,11 @@ async function writeText(state: RunState) {
   for (const hit of titled.slice(0, 5)) {
     pages.push({ url: hit.pageUrl, title: hit.title, seller: hit.source, text: hit.title });
     sellers.push(hit.source, safeDomain(hit.pageUrl));
+  }
+  for (const video of state.fastmoss.slice(0, 5)) {
+    const text = [video.title, video.creator].filter(Boolean).join(" — ") || video.url;
+    pages.push({ url: video.url, title: video.title || "FastMoss video", seller: video.creator || "FastMoss", text });
+    if (video.creator) sellers.push(video.creator);
   }
   const sourceTexts = accepted.map((page) => page.text);
   const request = { name: product.input_name, details: product.input_details, vision, sellersToRemove: sellers, pages };

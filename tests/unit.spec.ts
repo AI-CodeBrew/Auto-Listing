@@ -3,7 +3,10 @@ import sharp from "sharp";
 import { hammingDistance, perceptualHash } from "../src/lib/media/images";
 import { chooseBestImages, findCopiedPhrases, finalizeListing, removeStoreWords } from "../src/lib/pipeline/text";
 import { descriptionToHtml, toPlainText } from "../src/lib/sanitize";
+import { money, priceUsage } from "../src/lib/costs";
 import { unwrapBingLink } from "../src/lib/search/bing";
+import { marketplaceOfHit, takeMarketplacePhotos } from "../src/lib/search/marketplaces";
+import { videoSearchArguments, videosFromPayload } from "../src/lib/search/fastmoss";
 import { buildProductInput, makeHandle } from "../src/lib/shopify/send";
 import { fullSizeGuesses, largestFromSrcset, looksLikeIconOrLogo } from "../src/lib/web/extract";
 import { isPrivateAddress, isPublicUrl } from "../src/lib/web/net";
@@ -155,6 +158,7 @@ test.describe("text rules", () => {
   const draft = {
     best_name: "ShopMart Steel Bottle | ShopMart",
     name_options: ["Steel Bottle - ShopMart", "Insulated Bottle", "Steel Bottle"],
+    category: "ShopMart Drinkware",
     description: "A strong bottle. It is BPA-free and food safe. Rated 4.8 by buyers. Customers love it.",
     feature_bullets: ["- Dishwasher-safe body", "Steel lid", "4.5 stars overall", "Bestseller in its class"],
     claims_needing_check: ["food safe"],
@@ -163,6 +167,7 @@ test.describe("text rules", () => {
   test("store words, reviews and unconfirmed claims are handled", () => {
     const result = finalizeListing(draft, ["ShopMart"], "fallback");
     expect(result.name).toBe("Steel Bottle");
+    expect(result.category).toBe("Drinkware");
     expect(result.nameOptions).toEqual(["Insulated Bottle"]);
     expect(result.description).toContain("BPA-free [needs checking]");
     expect(result.description).toContain("food safe [needs checking]");
@@ -268,5 +273,54 @@ test.describe("Shopify token", () => {
     expect(await testShopifyConnection()).toEqual({ shopName: "Mock Store", domain: "mock-store.myshopify.com", missingScopes: [] });
     await mockSet({ scopes: ["write_products"] });
     expect((await testShopifyConnection()).missingScopes).toEqual(["write_inventory"]);
+  });
+});
+
+test.describe("search cost and FastMoss videos", () => {
+  test("an uploaded photo keeps at most 20 pictures from Amazon, AliExpress and Alibaba", () => {
+    expect(marketplaceOfHit({ original: "https://m.media-amazon.com/images/I/bottle.jpg", pageUrl: "https://www.amazon.com/dp/B001" })?.id).toBe("amazon");
+    expect(marketplaceOfHit({ original: "https://example.com/a.jpg", pageUrl: "", source: "AliExpress" })?.label).toBe("AliExpress");
+    expect(marketplaceOfHit({ original: "https://cdn.example.com/a.jpg", pageUrl: "https://shop.example.com/p/1", source: "Good Store" })).toBeNull();
+
+    const photo = (original: string) => ({ original });
+    const amazon = [photo("a1"), photo("a2"), photo("a3")];
+    const aliExpress = [photo("e1"), photo("a1")];
+    const alibaba = [photo("b1")];
+    expect(takeMarketplacePhotos([amazon, aliExpress, alibaba], 20).map((hit) => hit.original)).toEqual(["a1", "e1", "b1", "a2", "a3"]);
+    expect(takeMarketplacePhotos([amazon, aliExpress, alibaba], 2)).toHaveLength(2);
+  });
+
+  test("a request price is photos plus AI tokens, with FastMoss counted in credits", () => {
+    const cost = priceUsage({ serpapi: 2, fastmoss: 1, aiInput: 1_000_000, aiOutput: 500_000 });
+    expect(cost.serpapiUsd).toBe(0);
+    expect(cost.aiUsd).toBeCloseTo(0.1 + 0.25);
+    expect(cost.totalUsd).toBeCloseTo(0.35);
+    expect(cost.fastmossCredits).toBe(1);
+    expect(money(cost.totalUsd)).toBe("$0.3500");
+  });
+
+  test("video search arguments follow the tool schema", () => {
+    expect(videoSearchArguments(undefined, "steel bottle")).toEqual({ keywords: "steel bottle", region: "US" });
+    expect(videoSearchArguments({ properties: { keyword: { type: "string" }, region: { type: "string", enum: ["US", "GB"] } }, required: ["keyword"] }, "bottle")).toEqual({
+      keyword: "bottle",
+      region: "US",
+    });
+  });
+
+  test("video results keep TikTok links and skip pictures", () => {
+    const hits = videosFromPayload({
+      list: [
+        { title: "Bottle demo", unique_id: "shop", video_id: "123", cover: "https://cdn.example.com/a.jpg", fastmoss_url: "https://www.fastmoss.com/video/123" },
+        { url: "https://shop.example.com/about" },
+      ],
+    });
+    expect(hits).toEqual([
+      {
+        url: "https://www.tiktok.com/@shop/video/123",
+        title: "Bottle demo",
+        creator: "shop",
+        pageUrl: "https://www.fastmoss.com/video/123",
+      },
+    ]);
   });
 });

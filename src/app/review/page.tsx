@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { api, fileUrl, formatBytes, safeHref, shortUrl, usePolling } from "@/components/api";
-import type { Job, Product, ProductImage, ProductVideo, Source } from "@/lib/types";
+import type { Job, Product, ProductImage, ProductStage, ProductVideo, Source } from "@/lib/types";
 
 interface Detail {
   product: Product;
@@ -12,57 +13,136 @@ interface Detail {
   job: Job | null;
 }
 
+const ROW_STATUS: Partial<Record<ProductStage, string>> = {
+  researching: "RUNNING",
+  blocked: "BLOCKED",
+  failed: "FAILED",
+  review: "DONE",
+  history: "DONE",
+  rejected: "DONE",
+};
+
+const ROW_LABEL: Partial<Record<ProductStage, string>> = {
+  researching: "Searching",
+  blocked: "Needs links",
+  failed: "Failed",
+  review: "Ready",
+  history: "Past",
+  rejected: "Rejected",
+};
+
 export default function ReviewPage() {
-  const { data, refresh } = usePolling<{ products: Product[] }>("/api/products?stages=review,rejected", 3000);
+  const { data, refresh } = usePolling<{ products: Product[] }>("/api/products?stages=researching,blocked,failed,review,history,rejected", 3000);
   const products = data?.products ?? [];
-  const pending = products.filter((product) => product.stage === "review");
-  const rejected = products.filter((product) => product.stage === "rejected");
 
   return (
-    <div className="stack">
-      <h1>Review</h1>
-      {data && pending.length === 0 && <p className="muted">Nothing to review. Finished research appears here.</p>}
-      {pending.map((product) => (
-        // updated_at is not in the key, so polling never replaces your unsaved edits.
-        <ReviewCard key={product.id} id={product.id} onDone={refresh} />
+    <div className="page stack">
+      <header className="page-head">
+        <h1>Review listings</h1>
+        <p>Open a search to see the title, description, and pictures.</p>
+      </header>
+      {data && products.length === 0 && <p className="muted">No searches yet.</p>}
+      {products.map((product) => (
+        <ResultRow key={product.id} product={product} onDone={refresh} />
       ))}
-      {rejected.length > 0 && (
-        <section className="stack-tight">
-          <h2>Rejected</h2>
-          {rejected.map((product) => (
-            <RejectedRow key={product.id} product={product} onDone={refresh} />
-          ))}
-        </section>
-      )}
     </div>
   );
 }
 
-function RejectedRow({ product, onDone }: { product: Product; onDone: () => Promise<void> }) {
+function ResultRow({ product, onDone }: { product: Product; onDone: () => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const title = product.name || product.input_name || "Product from your upload";
+  const finished = product.stage === "review" || product.stage === "history" || product.stage === "rejected";
+
+  return (
+    <details
+      className="card listing-fold"
+      data-testid="job"
+      data-status={ROW_STATUS[product.stage] ?? "DONE"}
+      data-product={product.id}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
+      <summary>
+        <span className="card-title">{title}</span>
+        <span className={`pill pill-${product.stage === "failed" || product.stage === "blocked" ? "failed" : product.stage === "review" ? "done" : "muted"}`}>{ROW_LABEL[product.stage] ?? product.stage}</span>
+      </summary>
+      {open && (
+        <div className="listing-body">
+          {finished && <ReviewCard id={product.id} onDone={onDone} readOnly={product.stage !== "review"} />}
+          {product.stage === "blocked" && <BlockedEditor id={product.id} onDone={onDone} />}
+          {product.stage === "failed" && <FailedEditor id={product.id} onDone={onDone} />}
+          {product.stage === "researching" && <p className="muted">This search is still running.</p>}
+        </div>
+      )}
+    </details>
+  );
+}
+
+function BlockedEditor({ id, onDone }: { id: string; onDone: () => Promise<void> }) {
+  const [message, setMessage] = useState("Paste product page URLs to continue without searching.");
+  const [urls, setUrls] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api<Detail>(`/api/products/${id}`).then((body) => {
+      if (body.job?.message) setMessage(body.job.message);
+    }).catch(() => undefined);
+  }, [id]);
+
+  return (
+    <div className="notice notice-warn">
+      <p role="alert">{message}</p>
+      <label className="field">
+        <span>Product page URLs</span>
+        <textarea rows={3} value={urls} onChange={(e) => setUrls(e.target.value)} placeholder="One per line" data-testid="blocked-urls" />
+      </label>
+      {error && <p className="error">{error}</p>}
+      <button
+        className="btn btn-primary"
+        disabled={busy || !urls.trim()}
+        onClick={() => {
+          setBusy(true);
+          setError(null);
+          api(`/api/products/${id}/research`, { json: { urls } })
+            .then(onDone)
+            .catch((e: Error) => {
+              setError(e.message);
+              setBusy(false);
+            });
+        }}
+      >
+        Continue with these URLs
+      </button>
+    </div>
+  );
+}
+
+function FailedEditor({ id, onDone }: { id: string; onDone: () => Promise<void> }) {
   const [error, setError] = useState<string | null>(null);
   return (
-    <div className="card row row-between" data-testid="rejected-row">
-      <span>{product.name || product.input_name || "Product from your upload"}</span>
-      <div className="row">
-        {error && <span className="error">{error}</span>}
-        <button
-          className="btn"
-          onClick={() =>
-            api(`/api/products/${product.id}/research`, { json: {} })
-              .then(onDone)
-              .catch((e: Error) => setError(e.message))
-          }
-        >
-          Search Again
-        </button>
-      </div>
+    <div className="row">
+      {error && <span className="error">{error}</span>}
+      <button className="btn" onClick={() => api(`/api/products/${id}/research`, { json: {} }).then(onDone).catch((e: Error) => setError(e.message))}>
+        Try again
+      </button>
     </div>
   );
 }
 
-function ReviewCard({ id, onDone }: { id: string; onDone: () => Promise<void> }) {
+const VIDEO_SETUP = "Video setup is not integrated yet.";
+
+function shownWarnings(product: Product): string[] {
+  const hidden = (warning: string) => warning.includes("PUBLIC_BASE_URL") || warning.includes("FASTMOSS_API_KEY") || warning.includes("Google Lens was not used");
+  const rest = product.warnings.filter((warning) => warning !== VIDEO_SETUP && !hidden(warning));
+  const missingVideoSetup = product.search_videos && product.warnings.some((warning) => warning === VIDEO_SETUP || warning.includes("FASTMOSS_API_KEY"));
+  return missingVideoSetup ? [VIDEO_SETUP, ...rest] : rest;
+}
+
+function ReviewCard({ id, onDone, readOnly = false }: { id: string; onDone: () => Promise<void>; readOnly?: boolean }) {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [name, setName] = useState("");
+  const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
   const [imageIds, setImageIds] = useState<Set<string>>(new Set());
   const [videoIds, setVideoIds] = useState<Set<string>>(new Set());
@@ -74,6 +154,7 @@ function ReviewCard({ id, onDone }: { id: string; onDone: () => Promise<void> })
       .then((body) => {
         setDetail(body);
         setName(body.product.name ?? "");
+        setCategory(body.product.category ?? "");
         setDescription(body.product.description ?? "");
         setImageIds(new Set(body.images.filter((image) => image.selected).map((image) => image.id)));
         setVideoIds(new Set(body.videos.filter((video) => video.selected).map((video) => video.id)));
@@ -82,7 +163,7 @@ function ReviewCard({ id, onDone }: { id: string; onDone: () => Promise<void> })
   }, [id]);
 
   if (!detail) return <div className="card muted">{error ?? "Loading..."}</div>;
-  const { product, images, videos, sources } = detail;
+  const { product, images, videos } = detail;
   const passedCount = images.filter((image) => image.passed).length;
 
   const act = async (fn: () => Promise<unknown>) => {
@@ -104,7 +185,7 @@ function ReviewCard({ id, onDone }: { id: string; onDone: () => Promise<void> })
   };
 
   return (
-    <article className="card stack" data-testid="review-card" data-product={id}>
+    <article className="stack" data-testid="review-card" data-product={id}>
       <div className="row row-between">
         <h2 className="card-title">{product.name}</h2>
         {product.low_images && (
@@ -114,15 +195,22 @@ function ReviewCard({ id, onDone }: { id: string; onDone: () => Promise<void> })
         )}
       </div>
 
-      {product.warnings.map((warning) => (
+      {shownWarnings(product).map((warning) => (
         <div key={warning} className="notice notice-warn">{warning}</div>
       ))}
 
+      <div className="results-split">
+      <div className="stack">
+      <label className="field">
+        <span>Category</span>
+        <input type="text" value={category} readOnly={readOnly} onChange={(e) => setCategory(e.target.value)} data-testid="review-category" />
+        {category.trim() && <span className="pill pill-muted">{category.trim()}</span>}
+      </label>
       <label className="field">
         <span>Product name</span>
-        <input type="text" value={name} onChange={(e) => setName(e.target.value)} data-testid="review-name" />
+        <input type="text" value={name} readOnly={readOnly} onChange={(e) => setName(e.target.value)} data-testid="review-name" />
       </label>
-      {product.name_options.length > 0 && (
+      {!readOnly && product.name_options.length > 0 && (
         <div className="row row-wrap" aria-label="Other name options">
           <span className="muted">Other options:</span>
           {[product.name ?? "", ...product.name_options].filter((option) => option && option !== name).map((option) => (
@@ -133,27 +221,21 @@ function ReviewCard({ id, onDone }: { id: string; onDone: () => Promise<void> })
         </div>
       )}
 
-      <div className="two-col">
-        <label className="field">
-          <span>Rewritten description</span>
-          <textarea rows={14} value={description} onChange={(e) => setDescription(e.target.value)} data-testid="review-description" />
-          <small className="muted">Lines starting with &quot;- &quot; become bullets.</small>
-        </label>
-        <div className="field">
-          <span>Source text</span>
-          <div className="source-text" tabIndex={0}>{product.source_text || "No source text was found."}</div>
-        </div>
-      </div>
-
+      <label className="field">
+        <span>Product description</span>
+        <textarea rows={14} value={description} readOnly={readOnly} onChange={(e) => setDescription(e.target.value)} data-testid="review-description" />
+        <small className="muted">Lines starting with &quot;- &quot; become bullets.</small>
+      </label>
       {product.claims.length > 0 && (
         <div className="notice notice-warn">
           <strong>Needs checking:</strong> confirm these claims are true before publishing, or remove them.
           <ul>{product.claims.map((claim) => <li key={claim}>{claim}</li>)}</ul>
         </div>
       )}
+      </div>
 
-      <section>
-        <h3>Images <span className="muted">({imageIds.size} selected, {passedCount} of {images.length} passed)</span></h3>
+      <section className="stack-tight">
+        <h3>Images <span className="muted">({imageIds.size} selected)</span></h3>
         {images.length === 0 && <p className="muted">No images were found.</p>}
         <div className="image-grid">
           {images.map((image) => (
@@ -161,38 +243,23 @@ function ReviewCard({ id, onDone }: { id: string; onDone: () => Promise<void> })
           ))}
         </div>
       </section>
+      </div>
 
-      <section>
+      {videos.length > 0 && <section>
         <h3>Videos</h3>
-        {videos.length === 0 && <p className="muted">No videos were found.</p>}
         <ul className="video-list">
           {videos.map((video) => (
             <VideoRow key={video.id} productId={id} video={video} checked={videoIds.has(video.id)} onChange={(on) => toggle(videoIds, setVideoIds, video.id, on)} />
           ))}
         </ul>
-      </section>
-
-      <section>
-        <h3>Seller and source pages</h3>
-        <p>Seller: <strong>{product.seller_name || "Not found"}</strong></p>
-        <ul className="source-list">
-          {sources.map((source) => (
-            <li key={source.id}>
-              <span className={source.status === "accepted" ? "pill pill-done" : "pill pill-muted"}>{source.status === "accepted" ? "Used" : "Dropped"}</span>{" "}
-              <a href={safeHref(source.url)} target="_blank" rel="noopener noreferrer nofollow">{shortUrl(source.url)}</a>
-              {source.seller && <span className="muted"> ({source.seller})</span>}
-              {source.reason && <div className="muted small">{source.reason}</div>}
-            </li>
-          ))}
-        </ul>
-      </section>
+      </section>}
 
       <p className="notice">
         Web images and videos may be copyrighted. Use only what you have the right to use.
       </p>
 
       {error && <p className="error" role="alert">{error}</p>}
-      <div className="row">
+      {!readOnly && <div className="row">
         <button
           className="btn btn-primary"
           disabled={busy}
@@ -201,6 +268,7 @@ function ReviewCard({ id, onDone }: { id: string; onDone: () => Promise<void> })
               api(`/api/products/${id}/approve`, {
                 json: {
                   name,
+                  category,
                   description,
                   imageIds: images.filter((image) => imageIds.has(image.id)).map((image) => image.id),
                   videoIds: videos.filter((video) => videoIds.has(video.id)).map((video) => video.id),
@@ -217,52 +285,54 @@ function ReviewCard({ id, onDone }: { id: string; onDone: () => Promise<void> })
         <button className="btn" disabled={busy} onClick={() => act(() => api(`/api/products/${id}/research`, { json: {} }))}>
           Search Again
         </button>
-      </div>
+      </div>}
     </article>
   );
 }
 
 function ImageTile({ productId, image, checked, onChange }: { productId: string; image: ProductImage; checked: boolean; onChange: (on: boolean) => void }) {
-  const { checks } = image;
-  const results: [string, boolean | undefined][] = [
-    ["800x800", checks.minSize],
-    ["Not a duplicate", checks.duplicate ? false : image.reason?.startsWith("Too small") ? undefined : true],
-    ["Clear", checks.clear],
-    ["Correct product", checks.correctProduct],
-    ["No watermark", checks.noWatermark],
-    ["No other logo", checks.noOtherBrandLogo],
-  ];
+  const [open, setOpen] = useState(false);
+  const src = image.file_name ? fileUrl(productId, "images", image.file_name) : null;
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
   return (
     <div className={`image-tile ${image.passed ? "" : "image-tile-failed"}`} data-testid="image-tile" data-passed={image.passed}>
-      <label className="image-pick">
-        <input type="checkbox" checked={checked} disabled={!image.file_name} onChange={(e) => onChange(e.target.checked)} aria-label="Use this image" />
-        {image.file_name ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={fileUrl(productId, "images", image.file_name)} alt={`Candidate ${image.width}x${image.height}`} loading="lazy" />
-        ) : (
-          <div className="image-missing">Not downloaded</div>
-        )}
-      </label>
-      <div className="image-meta">
-        <span className={image.passed ? "pill pill-done" : "pill pill-failed"}>{image.passed ? "Passed" : "Failed"}</span>{" "}
-        {image.width ? <span className="muted small">{image.width}x{image.height} {formatBytes(image.bytes)}</span> : null}
-        {image.reason && <div className="small reason">{image.reason}</div>}
-        <details className="small">
-          <summary>Check results</summary>
-          <ul className="check-list">
-            {results.filter(([, value]) => value !== undefined).map(([label, value]) => (
-              <li key={label}>{value ? "Pass" : "Fail"}: {label}</li>
-            ))}
-            {!checks.aiChecked && <li>Vision check not run</li>}
-            {checks.quality !== undefined && <li>Quality: {checks.quality}/100</li>}
-          </ul>
-        </details>
-        {image.uploaded ? (
-          <div className="small muted">Your upload</div>
-        ) : (
-          <div className="small"><a href={safeHref(image.source_page)} target="_blank" rel="noopener noreferrer nofollow">Source page</a></div>
+      <div className="image-frame">
+        <label className="image-pick">
+          <input type="checkbox" checked={checked} disabled={!image.file_name} onChange={(e) => onChange(e.target.checked)} aria-label="Use this image" />
+          {src ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={src} alt="" loading="lazy" />
+          ) : (
+            <div className="image-missing">Not downloaded</div>
+          )}
+        </label>
+        {src && (
+          <button type="button" className="image-zoom" aria-label="View full size" onClick={() => setOpen(true)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="6" />
+              <path d="M16 16l4 4M11 8.5v5M8.5 11h5" />
+            </svg>
+          </button>
         )}
       </div>
+      {image.uploaded && <div className="image-meta"><div className="small muted">Your upload</div></div>}
+      {open && src && createPortal(
+        <div className="image-lightbox" role="dialog" aria-modal="true" aria-label="Full size image" onClick={() => setOpen(false)}>
+          <button type="button" className="image-lightbox-close" aria-label="Close" onClick={() => setOpen(false)}>×</button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={src} alt="" onClick={(event) => event.stopPropagation()} />
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }
@@ -277,9 +347,6 @@ function VideoRow({ productId, video, checked, onChange }: { productId: string; 
         {video.uploaded && <span className="muted">Your upload </span>}
         {video.url && <a href={safeHref(video.url)} target="_blank" rel="noopener noreferrer nofollow">{shortUrl(video.url)}</a>}
         {video.bytes ? <span className="muted"> {formatBytes(video.bytes)}</span> : null}
-        {video.source_page && (
-          <span className="small"> from <a href={safeHref(video.source_page)} target="_blank" rel="noopener noreferrer nofollow">source page</a></span>
-        )}
         {video.reason && <div className="small reason">{video.reason}</div>}
         {video.file_name && <video className="video-preview" controls preload="none" src={fileUrl(productId, "videos", video.file_name)} />}
       </div>

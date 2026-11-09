@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { db } from "./db";
+import { EMPTY_USAGE, normalizeUsage } from "./costs";
 import type {
   ImageChecks,
   Job,
@@ -8,6 +9,7 @@ import type {
   ProductImage,
   ProductStage,
   ProductVideo,
+  RequestUsage,
   ShopifyStatus,
   Source,
   SourceStatus,
@@ -30,6 +32,10 @@ function toProduct(row: Row): Product {
   return {
     ...(row as unknown as Product),
     input_urls: parse(row.input_urls, []),
+    input_images: (() => {
+      const names = parse<string[]>(row.input_images, []);
+      return names.length ? names : row.input_image ? [String(row.input_image)] : [];
+    })(),
     blocked_urls: parse(row.blocked_urls, []),
     vision: parse<VisionResult | null>(row.vision, null),
     name_options: parse(row.name_options, []),
@@ -37,10 +43,17 @@ function toProduct(row: Row): Product {
     warnings: parse(row.warnings, []),
     shopify_warnings: parse(row.shopify_warnings, []),
     low_images: Boolean(row.low_images),
+    search_photos: row.search_photos === undefined ? true : Boolean(row.search_photos),
+    search_videos: row.search_videos === undefined ? true : Boolean(row.search_videos),
   };
 }
 function toJob(row: Row): Job {
-  return { ...(row as unknown as Job), log: parse(row.log, []), skip_search: Boolean(row.skip_search) };
+  return {
+    ...(row as unknown as Job),
+    log: parse(row.log, []),
+    skip_search: Boolean(row.skip_search),
+    usage: normalizeUsage(parse<Partial<RequestUsage>>(row.usage, {})),
+  };
 }
 function toImage(row: Row): ProductImage {
   return {
@@ -67,17 +80,34 @@ export function createProductWithJob(input: {
   name: string | null;
   details?: string | null;
   image: string | null;
+  images?: string[];
   video: string | null;
   urls: string[];
+  searchPhotos?: boolean;
+  searchVideos?: boolean;
 }): { product: Product; job: Job } {
   const stamp = now();
+  const searchPhotos = input.searchPhotos !== false;
+  const searchVideos = input.searchVideos !== false;
   const tx = db().transaction(() => {
     db()
       .prepare(
-        `INSERT INTO products (id, stage, input_name, input_details, input_image, input_video, input_urls, created_at, updated_at)
-         VALUES (?, 'researching', ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO products (id, stage, input_name, input_details, input_image, input_images, input_video, input_urls, search_photos, search_videos, created_at, updated_at)
+         VALUES (?, 'researching', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(input.id, input.name, input.details ?? null, input.image, input.video, JSON.stringify(input.urls), stamp, stamp);
+      .run(
+        input.id,
+        input.name,
+        input.details ?? null,
+        input.image,
+        JSON.stringify(input.images?.length ? input.images : input.image ? [input.image] : []),
+        input.video,
+        JSON.stringify(input.urls),
+        searchPhotos ? 1 : 0,
+        searchVideos ? 1 : 0,
+        stamp,
+        stamp,
+      );
     return enqueueJob(input.id, false);
   });
   const job = tx();
@@ -97,14 +127,32 @@ export function listProducts(stages: ProductStage[]): Product[] {
   return rows.map(toProduct);
 }
 
+/** Finished reviews other than the one just completed move to History. */
+export function archiveOtherReviews(keepId: string): void {
+  db().prepare("UPDATE products SET stage = 'history', updated_at = ? WHERE stage = 'review' AND id != ?").run(now(), keepId);
+}
+
 export function countByStage(): Record<string, number> {
   const rows = db().prepare("SELECT stage, COUNT(*) AS n FROM products GROUP BY stage").all() as { stage: string; n: number }[];
   return Object.fromEntries(rows.map((r) => [r.stage, r.n]));
 }
 
+/** Approved means accepted from review and not sent yet. Pushed means a Shopify product already exists. */
+export function listingSplit(): { approved: number; pushed: number } {
+  const row = db()
+    .prepare(
+      `SELECT
+         SUM(CASE WHEN shopify_product_id IS NULL THEN 1 ELSE 0 END) AS approved,
+         SUM(CASE WHEN shopify_product_id IS NOT NULL THEN 1 ELSE 0 END) AS pushed
+       FROM products WHERE stage = 'listing'`,
+    )
+    .get() as { approved: number | null; pushed: number | null };
+  return { approved: row.approved ?? 0, pushed: row.pushed ?? 0 };
+}
+
 const JSON_FIELDS = new Set(["input_urls", "blocked_urls", "vision", "name_options", "claims", "warnings", "shopify_warnings"]);
 const PRODUCT_FIELDS = new Set([
-  "stage", "input_urls", "blocked_urls", "vision", "name", "name_options", "description", "source_text", "claims",
+  "stage", "input_urls", "blocked_urls", "vision", "name", "name_options", "category", "description", "source_text", "claims",
   "seller_name", "low_images", "warnings", "sku", "price", "cost", "shopify_status", "shopify_product_id",
   "shopify_admin_url", "shopify_handle", "shopify_error", "shopify_warnings",
 ]);
@@ -135,7 +183,7 @@ export function resetResearch(id: string): void {
     db().prepare("DELETE FROM images WHERE product_id = ? AND uploaded = 0").run(id);
     db().prepare("DELETE FROM videos WHERE product_id = ? AND uploaded = 0").run(id);
     updateProduct(id, {
-      name: null, name_options: [], description: null, source_text: null, claims: [],
+      name: null, name_options: [], category: null, description: null, source_text: null, claims: [],
       seller_name: null, low_images: false, warnings: [],
     });
   });
@@ -167,14 +215,58 @@ export function latestJob(productId: string): Job | null {
   return row ? toJob(row) : null;
 }
 
-export function listRecentJobs(limit = 30): (Job & { product_name: string | null; product_stage: ProductStage })[] {
+export function listRecentJobs(limit = 30): (Job & { product_name: string | null; product_stage: ProductStage; search_photos: boolean; search_videos: boolean })[] {
   const rows = db()
     .prepare(
-      `SELECT j.*, COALESCE(p.name, p.input_name) AS product_name, p.stage AS product_stage
+      `SELECT j.*, COALESCE(p.name, p.input_name) AS product_name, p.stage AS product_stage,
+              p.search_photos AS search_photos, p.search_videos AS search_videos
        FROM jobs j JOIN products p ON p.id = j.product_id ORDER BY j.seq DESC LIMIT ?`,
     )
     .all(limit) as Row[];
-  return rows.map((row) => ({ ...toJob(row), product_name: row.product_name as string | null, product_stage: row.product_stage as ProductStage }));
+  return rows.map((row) => ({
+    ...toJob(row),
+    product_name: row.product_name as string | null,
+    product_stage: row.product_stage as ProductStage,
+    search_photos: row.search_photos === undefined ? true : Boolean(row.search_photos),
+    search_videos: row.search_videos === undefined ? true : Boolean(row.search_videos),
+  }));
+}
+
+/** Sum of every research request, plus how many listings Shopify has accepted. */
+export function usageTotals(): { requests: number; usage: RequestUsage; shopifyDrafts: number } {
+  const rows = db().prepare("SELECT usage FROM jobs").all() as { usage: string }[];
+  const usage = rows.reduce((sum, row) => {
+    const item = normalizeUsage(parse<Partial<RequestUsage>>(row.usage, {}));
+    return {
+      serpapi: sum.serpapi + item.serpapi,
+      fastmoss: sum.fastmoss + item.fastmoss,
+      aiInput: sum.aiInput + item.aiInput,
+      aiOutput: sum.aiOutput + item.aiOutput,
+    };
+  }, { ...EMPTY_USAGE });
+  const drafts = db().prepare("SELECT COUNT(*) AS n FROM products WHERE shopify_status = 'draft'").get() as { n: number };
+  return { requests: rows.length, usage, shopifyDrafts: drafts.n };
+}
+
+export function setUsage(jobId: string, usage: RequestUsage): void {
+  db().prepare("UPDATE jobs SET usage = ? WHERE id = ?").run(JSON.stringify(normalizeUsage(usage)), jobId);
+}
+
+/** Adds to the job that is running now. Research runs one job at a time. */
+export function noteRunningUsage(delta: Partial<RequestUsage>): void {
+  const row = db().prepare("SELECT id, usage FROM jobs WHERE status = 'RUNNING' ORDER BY seq DESC LIMIT 1").get() as { id: string; usage: string } | undefined;
+  if (!row) return;
+  const current = normalizeUsage(parse<Partial<RequestUsage>>(row.usage, {}));
+  setUsage(row.id, {
+    serpapi: current.serpapi + (delta.serpapi ?? 0),
+    fastmoss: current.fastmoss + (delta.fastmoss ?? 0),
+    aiInput: current.aiInput + (delta.aiInput ?? 0),
+    aiOutput: current.aiOutput + (delta.aiOutput ?? 0),
+  });
+}
+
+export function emptyUsage(): RequestUsage {
+  return { ...EMPTY_USAGE };
 }
 
 export function hasActiveJob(productId: string): boolean {
@@ -347,6 +439,18 @@ export function skuTakenByOther(productId: string, sku: string): boolean {
  * The duplicate guard. A single conditional UPDATE, so only one caller can move a
  * product into 'sending', and never once a Shopify ID has been saved.
  */
+/** Moves an existing Shopify draft into 'sending' so an update cannot run twice at once. */
+export function claimForUpdate(productId: string): boolean {
+  const result = db()
+    .prepare(
+      `UPDATE products
+       SET shopify_status = 'sending', shopify_error = NULL, shopify_warnings = '[]', updated_at = ?
+       WHERE id = ? AND stage = 'listing' AND shopify_product_id IS NOT NULL AND shopify_status IN ('draft', 'error')`,
+    )
+    .run(now(), productId);
+  return result.changes === 1;
+}
+
 export function claimForSending(productId: string, handle: string): boolean {
   const result = db()
     .prepare(

@@ -13,7 +13,7 @@ import type { ProductStage } from "@/lib/types";
 
 const VIDEO_TYPES: Record<string, string> = { "video/mp4": "mp4", "video/quicktime": "mov", "video/webm": "webm" };
 const VIDEO_EXT = /\.(mp4|mov|webm)$/i;
-const ALL_STAGES: ProductStage[] = ["researching", "blocked", "failed", "review", "listing", "rejected"];
+const ALL_STAGES: ProductStage[] = ["researching", "blocked", "failed", "review", "listing", "rejected", "history"];
 
 export async function GET(request: Request) {
   const raw = new URL(request.url).searchParams.get("stages");
@@ -27,11 +27,15 @@ export async function GET(request: Request) {
   return ok({ products, counts: repo.countByStage() });
 }
 
+interface SavedFile {
+  tmp: string;
+  kind: "image" | "video";
+  videoExt: string | null;
+}
+
 interface Parsed {
   fields: Record<string, string>;
-  tmp: string | null;
-  kind: "image" | "video" | null;
-  videoExt: string | null;
+  files: SavedFile[];
   error: string | null;
 }
 
@@ -43,12 +47,18 @@ function parseUpload(request: Request, productId: string): Promise<Parsed> {
       reject(new Error("Expected a form upload"));
       return;
     }
-    const result: Parsed = { fields: {}, tmp: null, kind: null, videoExt: null, error: null };
+    const result: Parsed = { fields: {}, files: [], error: null };
     const writes: Promise<unknown>[] = [];
-    const parser = busboy({ headers: { "content-type": contentType }, limits: { files: 1, fileSize: LIMITS.videoMaxBytes, fieldSize: 1024 * 1024 } });
+    const parser = busboy({
+      headers: { "content-type": contentType },
+      limits: { files: LIMITS.uploadImages + 1, fileSize: LIMITS.videoMaxBytes, fieldSize: 1024 * 1024 },
+    });
 
     parser.on("field", (name, value) => {
       result.fields[name] = value;
+    });
+    parser.on("filesLimit", () => {
+      result.error = `You can add up to ${LIMITS.uploadImages} images.`;
     });
     parser.on("file", (_name, stream, info) => {
       const mime = (info.mimeType || "").toLowerCase();
@@ -63,12 +73,16 @@ function parseUpload(request: Request, productId: string): Promise<Parsed> {
         stream.resume();
         return;
       }
-      result.kind = isVideo ? "video" : "image";
-      result.videoExt = isVideo ? (VIDEO_TYPES[mime] ?? (info.filename.match(VIDEO_EXT)?.[1] ?? "mp4").toLowerCase()) : null;
+      if (result.files.length >= LIMITS.uploadImages + 1) {
+        result.error = `You can add up to ${LIMITS.uploadImages} images.`;
+        stream.resume();
+        return;
+      }
+      const videoExt = isVideo ? (VIDEO_TYPES[mime] ?? (info.filename.match(VIDEO_EXT)?.[1] ?? "mp4").toLowerCase()) : null;
       const tmp = tempPath(productId, isVideo ? "videos" : "images");
-      result.tmp = tmp;
+      result.files.push({ tmp, kind: isVideo ? "video" : "image", videoExt });
       stream.on("limit", () => {
-        result.error = "That file is larger than the 1 GB limit.";
+        result.error = isVideo ? "That file is larger than the 1 GB limit." : "Images can be at most 20 MB.";
       });
       writes.push(pipeline(stream, fs.createWriteStream(tmp)));
     });
@@ -110,37 +124,53 @@ export async function POST(request: Request) {
     cleanup();
     return fail(`These are not valid web addresses: ${invalid.join(", ")}`);
   }
-  if (!parsed.tmp && !name) {
+  const imageFiles = parsed.files.filter((file) => file.kind === "image");
+  const videoFiles = parsed.files.filter((file) => file.kind === "video");
+  if (videoFiles.length > 1) {
+    cleanup();
+    return fail("Only one video can be added.");
+  }
+  if (imageFiles.length > LIMITS.uploadImages) {
+    cleanup();
+    return fail(`You can add up to ${LIMITS.uploadImages} images.`);
+  }
+  if (!parsed.files.length && !name) {
     cleanup();
     return fail("Enter a product name, or upload an image or video.");
   }
 
   let image: string | null = null;
+  const images: string[] = [];
   let video: string | null = null;
   try {
-    if (parsed.tmp && parsed.kind === "video") {
-      video = commitFile(id, "videos", parsed.tmp, parsed.videoExt ?? "mp4");
-    } else if (parsed.tmp) {
-      if (fs.statSync(parsed.tmp).size > LIMITS.imageMaxBytes) {
+    for (const file of imageFiles) {
+      if (fs.statSync(file.tmp).size > LIMITS.imageMaxBytes) {
         cleanup();
         return fail("Images can be at most 20 MB.");
       }
-      const meta = await sharp(parsed.tmp).metadata();
+      const meta = await sharp(file.tmp).metadata();
       const keep: Record<string, string> = { jpeg: "jpg", png: "png", webp: "webp", gif: "gif" };
+      let saved: string;
       if (meta.format && keep[meta.format]) {
-        image = commitFile(id, "images", parsed.tmp, keep[meta.format]);
+        saved = commitFile(id, "images", file.tmp, keep[meta.format]);
       } else {
         const converted = tempPath(id, "images");
-        await sharp(parsed.tmp).rotate().flatten({ background: "#ffffff" }).jpeg({ quality: 92 }).toFile(converted);
-        removeQuietly(parsed.tmp);
-        image = commitFile(id, "images", converted, "jpg");
+        await sharp(file.tmp).rotate().flatten({ background: "#ffffff" }).jpeg({ quality: 92 }).toFile(converted);
+        removeQuietly(file.tmp);
+        saved = commitFile(id, "images", converted, "jpg");
       }
+      images.push(saved);
     }
+    image = images[0] ?? null;
+    const clip = videoFiles[0];
+    if (clip) video = commitFile(id, "videos", clip.tmp, clip.videoExt ?? "mp4");
   } catch {
     cleanup();
     return fail("That file could not be read as an image.");
   }
 
-  const { product, job } = repo.createProductWithJob({ id, name, details, image, video, urls });
+  const searchPhotos = parsed.fields.search_photos !== "0";
+  const searchVideos = parsed.fields.search_videos !== "0";
+  const { product, job } = repo.createProductWithJob({ id, name, details, image, images, video, urls, searchPhotos, searchVideos });
   return ok({ product, job }, 201);
 }

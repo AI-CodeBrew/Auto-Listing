@@ -173,13 +173,15 @@ export interface BuildInputArgs {
  * Builds the productSet input. Status is always DRAFT and vendor is never set, so the
  * source seller's name cannot reach it.
  */
-export function buildProductInput({ product, imageSources, fileVideoSources, externalVideos }: BuildInputArgs) {
+export function buildProductInput({ product, imageSources, fileVideoSources, externalVideos, update = false }: BuildInputArgs & { update?: boolean }) {
   const title = (product.name || "").trim();
   const price = product.price?.trim() ? product.price.trim() : "0.00";
   const cost = product.cost?.trim();
   return {
+    ...(update && product.shopify_product_id ? { id: product.shopify_product_id } : {}),
     title,
     handle: product.shopify_handle,
+    ...(product.category?.trim() ? { productType: product.category.trim() } : {}),
     descriptionHtml: descriptionToHtml(product.description || ""),
     status: "DRAFT" as const,
     productOptions: [{ name: "Title", values: [{ name: "Default Title" }] }],
@@ -191,11 +193,15 @@ export function buildProductInput({ product, imageSources, fileVideoSources, ext
         ...(cost ? { inventoryItem: { cost } } : {}),
       },
     ],
-    files: [
-      ...imageSources.map(({ source }) => ({ originalSource: source, contentType: "IMAGE", alt: title })),
-      ...fileVideoSources.map(({ source }) => ({ originalSource: source, contentType: "VIDEO", alt: title })),
-      ...externalVideos.map((source) => ({ originalSource: source, contentType: "EXTERNAL_VIDEO", alt: title })),
-    ],
+    ...(update
+      ? {}
+      : {
+          files: [
+            ...imageSources.map(({ source }) => ({ originalSource: source, contentType: "IMAGE", alt: title })),
+            ...fileVideoSources.map(({ source }) => ({ originalSource: source, contentType: "VIDEO", alt: title })),
+            ...externalVideos.map((source) => ({ originalSource: source, contentType: "EXTERNAL_VIDEO", alt: title })),
+          ],
+        }),
   };
 }
 
@@ -205,10 +211,20 @@ export type StartResult = { started: true } | { started: false; reason: string; 
  * Starts a send unless one is running or the product already exists in Shopify.
  * The claim is atomic, so a double click cannot start two sends.
  */
-export function startSend(productId: string): StartResult {
+export function startSend(productId: string, update = false): StartResult {
   const product = repo.getProduct(productId);
   if (!product) return { started: false, reason: "Product not found", status: 404 };
   if (product.stage !== "listing") return { started: false, reason: "Only products in the Listing tab can be sent to Shopify.", status: 409 };
+  if (update) {
+    if (!product.shopify_product_id) return { started: false, reason: "This listing is not on Shopify yet.", status: 409 };
+    if (!repo.claimForUpdate(productId)) return { started: false, reason: "This product is already being sent.", status: 409 };
+    runUpdate(productId).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[shopify] update failed for ${productId}:`, error);
+      repo.setShopifyResult(productId, { status: "error", error: message });
+    });
+    return { started: true };
+  }
   if (product.shopify_product_id) return { started: false, reason: "This product already exists in Shopify, so no new product was created.", status: 409 };
 
   const missing = missingShopifySettings();
@@ -230,6 +246,29 @@ export function startSend(productId: string): StartResult {
     repo.setShopifyResult(productId, { status: "error", error: message });
   });
   return { started: true };
+}
+
+/** Writes the edited name, description, price, and SKU onto the draft that already exists. */
+async function runUpdate(productId: string): Promise<void> {
+  const product = repo.getProduct(productId)!;
+  const input = buildProductInput({ product, imageSources: [], fileVideoSources: [], externalVideos: [], update: true });
+  const data = await graphql<{
+    productSet: {
+      product: { id: string; status: string; handle: string } | null;
+      userErrors: { code: string | null; field: string[] | null; message: string }[];
+    };
+  }>(PRODUCT_SET, { input, synchronous: true });
+  const { product: updated, userErrors } = data.productSet;
+  if (userErrors.length) throw new ShopifyError(userErrors.map((e) => (e.field?.length ? `${e.field.join(".")}: ${e.message}` : e.message)).join("; "));
+  if (!updated) throw new ShopifyError("Shopify did not return the updated product.");
+  const warnings = updated.status !== "DRAFT" ? [`Shopify reports this product's status as ${updated.status}, not DRAFT. Please check it.`] : [];
+  repo.setShopifyResult(productId, {
+    status: "draft",
+    productId: updated.id,
+    adminUrl: adminUrl(updated.id),
+    error: null,
+    warnings,
+  });
 }
 
 async function runSend(productId: string): Promise<void> {

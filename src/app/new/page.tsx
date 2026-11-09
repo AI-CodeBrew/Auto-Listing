@@ -1,58 +1,119 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, usePolling } from "@/components/api";
-import type { Job, ProductStage } from "@/lib/types";
-
-type JobRow = Job & { product_name: string | null; product_stage: ProductStage };
-
 interface Status {
   ai: { ok: boolean; message: string | null };
-  shopifyMissing: string[];
 }
 
-const STATUS_LABEL: Record<Job["status"], string> = {
-  QUEUED: "Queued",
-  RUNNING: "Running",
-  DONE: "Done",
-  BLOCKED: "BLOCKED",
-  FAILED: "Failed",
-};
+interface LocalFile {
+  id: string;
+  file: File;
+  preview: string | null;
+  kind: "image" | "video";
+}
+
+const MAX_IMAGES = 20;
+const IMAGE_MAX = 20 * 1024 * 1024;
+const VIDEO_MAX = 1024 * 1024 * 1024;
+const VIDEO_EXT = /\.(mp4|mov|webm)$/i;
 
 export default function NewProductPage() {
   const [name, setName] = useState("");
   const [details, setDetails] = useState("");
   const [urls, setUrls] = useState("");
-  const [hasFile, setHasFile] = useState(false);
+  const [files, setFiles] = useState<LocalFile[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const [searchPhotos, setSearchPhotos] = useState(true);
+  const [searchVideos, setSearchVideos] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const jobs = usePolling<{ jobs: JobRow[] }>("/api/jobs", 1500);
+  const filesRef = useRef(files);
+  const dragDepth = useRef(0);
+  filesRef.current = files;
   const status = usePolling<Status>("/api/status", 10000);
+  const images = files.filter((item) => item.kind === "image");
+  const hasPhoto = images.length > 0;
+
+  useEffect(() => {
+    return () => {
+      for (const item of filesRef.current) if (item.preview) URL.revokeObjectURL(item.preview);
+    };
+  }, []);
+
+  function addFiles(list: FileList | File[]) {
+    const incoming = Array.from(list);
+    if (!incoming.length) return;
+    const next = [...filesRef.current];
+    let message: string | null = null;
+    for (const file of incoming) {
+      const video = file.type.startsWith("video/") || VIDEO_EXT.test(file.name);
+      const image = file.type.startsWith("image/");
+      if (!video && !image) {
+        message = "Add an image, or an MP4, MOV or WEBM video.";
+        continue;
+      }
+      if (video) {
+        if (file.size > VIDEO_MAX) {
+          message = "Videos can be at most 1 GB.";
+          continue;
+        }
+        const kept = next.filter((item) => item.kind !== "video");
+        next.length = 0;
+        next.push(...kept, { id: crypto.randomUUID(), file, preview: null, kind: "video" });
+        continue;
+      }
+      if (file.size > IMAGE_MAX) {
+        message = "Images can be at most 20 MB.";
+        continue;
+      }
+      if (next.filter((item) => item.kind === "image").length >= MAX_IMAGES) {
+        message = `You can add up to ${MAX_IMAGES} images.`;
+        continue;
+      }
+      next.push({ id: crypto.randomUUID(), file, preview: URL.createObjectURL(file), kind: "image" });
+    }
+    setError(message);
+    setFiles(next);
+  }
+
+  function removeFile(id: string) {
+    setFiles((current) => {
+      const item = current.find((entry) => entry.id === id);
+      if (item?.preview) URL.revokeObjectURL(item.preview);
+      return current.filter((entry) => entry.id !== id);
+    });
+  }
+
+  function clearFiles() {
+    for (const item of files) if (item.preview) URL.revokeObjectURL(item.preview);
+    setFiles([]);
+    if (fileRef.current) fileRef.current.value = "";
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
-    const file = fileRef.current?.files?.[0];
-    if (!file && !name.trim()) {
-      setError("Enter a product name, or upload an image or video.");
+    if (!files.length && !name.trim()) {
+      setError("Enter a product name, or add an image or video.");
       return;
     }
     const form = new FormData();
     form.append("name", name);
     form.append("details", details);
     form.append("urls", urls);
-    if (file) form.append("file", file);
+    form.append("search_photos", searchPhotos ? "1" : "0");
+    form.append("search_videos", searchVideos ? "1" : "0");
+    for (const item of files) form.append("file", item.file);
     setSubmitting(true);
     try {
       await api("/api/products", { form });
       setName("");
       setDetails("");
       setUrls("");
-      setHasFile(false);
-      if (fileRef.current) fileRef.current.value = "";
-      void jobs.refresh();
+      clearFiles();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -61,137 +122,139 @@ export default function NewProductPage() {
   }
 
   return (
-    <div className="stack">
+    <div className="page stack">
+      <header className="page-head">
+        <h1>Add new listing</h1>
+        <p>Add your photos. The title, description, and matching pictures show up in Review listings.</p>
+      </header>
       {status.data && !status.data.ai.ok && (
         <div className="notice notice-warn" role="status" data-testid="ai-warning">
           <strong>Research cannot run yet.</strong> {status.data.ai.message}
         </div>
       )}
-      {status.data && status.data.shopifyMissing.length > 0 && (
-        <div className="notice" role="status">
-          Shopify is not connected yet. Open the <Link href="/shopify">Shopify tab</Link> and fill in: {status.data.shopifyMissing.join(", ")}.
-        </div>
-      )}
-
-      <section className="card">
-        <h1>New product</h1>
-        <p className="muted">Give at least one of: an image, a video, or a product name.</p>
+      <section className="card form-card">
         <form onSubmit={submit} className="form">
-          <label className="field">
-            <span>Product image or video</span>
-            <input ref={fileRef} type="file" name="file" accept="image/*,video/mp4,video/quicktime,video/webm,.mov" onChange={(e) => setHasFile(Boolean(e.target.files?.length))} />
-            <small className="muted">Images up to 20 MB. MP4, MOV or WEBM videos up to 1 GB.</small>
-          </label>
+          <div className="field">
+            <span>Photos</span>
+            <div
+              className={dragging ? "dropzone dropzone-on" : "dropzone"}
+              onDragEnter={(event) => {
+                event.preventDefault();
+                dragDepth.current += 1;
+                setDragging(true);
+              }}
+              onDragOver={(event) => event.preventDefault()}
+              onDragLeave={(event) => {
+                event.preventDefault();
+                dragDepth.current -= 1;
+                if (dragDepth.current <= 0) {
+                  dragDepth.current = 0;
+                  setDragging(false);
+                }
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                dragDepth.current = 0;
+                setDragging(false);
+                addFiles(event.dataTransfer.files);
+              }}
+            >
+              <input
+                ref={fileRef}
+                className="drop-input"
+                type="file"
+                name="file"
+                multiple
+                accept="image/*,video/mp4,video/quicktime,video/webm,.mov"
+                onChange={(event) => {
+                  if (event.target.files) addFiles(event.target.files);
+                  event.target.value = "";
+                }}
+              />
+              {files.length === 0 ? (
+                <button type="button" className="drop-empty" onClick={() => fileRef.current?.click()}>
+                  <DropIcon />
+                  <strong>Drop images here</strong>
+                  <span className="muted">or click to browse. You can add several at once.</span>
+                </button>
+              ) : (
+                <div className="drop-filled">
+                  <div className="drop-grid">
+                    {files.map((item, index) => (
+                      <figure key={item.id} className="drop-thumb">
+                        {item.preview ? <img src={item.preview} alt="" /> : <span className="drop-video">{item.file.name}</span>}
+                        {item.kind === "image" && images[0]?.id === item.id && <span className="drop-badge">Main</span>}
+                        <button type="button" className="drop-remove" aria-label={`Remove ${item.file.name || `image ${index + 1}`}`} onClick={() => removeFile(item.id)}>
+                          ×
+                        </button>
+                      </figure>
+                    ))}
+                  </div>
+                  <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
+                    Add more
+                  </button>
+                </div>
+              )}
+            </div>
+            <small className="muted">Up to {MAX_IMAGES} images, 20 MB each. One video up to 1 GB. The first photo is used to find matches.</small>
+          </div>
           <label className="field">
             <span>Product name</span>
             <input type="text" name="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Stainless steel water bottle 750 ml" />
           </label>
           <label className="field">
-            <span>Product details (optional)</span>
+            <span>Product details</span>
             <textarea
               name="details"
               rows={4}
               value={details}
               onChange={(e) => setDetails(e.target.value)}
-              placeholder="Stainless steel water bottle, 750 ml, leak-proof, matte black. Mention brand, material, size, colors and use."
+              placeholder="Brand, material, size, colors, and how it is used."
               data-testid="product-details"
             />
-            <small className="muted">The description is written from this first. Leave it empty to rely on the photo and the web.</small>
           </label>
+          <div className="field">
+            <span>Search</span>
+            <div className="toggles" role="group" aria-label="What to search">
+              <button type="button" className={searchPhotos ? "toggle toggle-on" : "toggle"} aria-pressed={searchPhotos} onClick={() => setSearchPhotos((on) => !on)}>
+                <span className="toggle-knob" aria-hidden="true" />
+                <span className="toggle-copy">
+                  <strong>Photos</strong>
+                  <span className="muted small">{hasPhoto ? "Matches from your photo" : "Google Images"}</span>
+                </span>
+              </button>
+              <button type="button" className={searchVideos ? "toggle toggle-on" : "toggle"} aria-pressed={searchVideos} onClick={() => setSearchVideos((on) => !on)}>
+                <span className="toggle-knob" aria-hidden="true" />
+                <span className="toggle-copy">
+                  <strong>Videos</strong>
+                  <span className="muted small">TikTok</span>
+                </span>
+              </button>
+            </div>
+          </div>
           <label className="field">
-            <span>Product page URLs (optional)</span>
-            <textarea name="urls" rows={3} value={urls} onChange={(e) => setUrls(e.target.value)} placeholder={"One per line\nhttps://example-store.com/products/water-bottle"} />
+            <span>Product page URLs</span>
+            <textarea name="urls" rows={3} value={urls} onChange={(e) => setUrls(e.target.value)} placeholder={"Optional, one per line\nhttps://example-store.com/products/water-bottle"} />
           </label>
           {error && <p className="error" role="alert">{error}</p>}
           <div className="row">
-            <button className="btn btn-primary" type="submit" disabled={submitting || (!hasFile && !name.trim())}>
+            <button className="btn btn-primary" type="submit" disabled={submitting || (files.length === 0 && !name.trim())}>
               {submitting ? "Uploading..." : "Start research"}
             </button>
+            <Link href="/review">Open results</Link>
           </div>
         </form>
-      </section>
-
-      <section className="stack-tight" aria-live="polite">
-        <h2>Research jobs</h2>
-        {jobs.error && <p className="error">{jobs.error}</p>}
-        {jobs.data && jobs.data.jobs.length === 0 && <p className="muted">No jobs yet. Jobs run one at a time and carry on after a restart.</p>}
-        {jobs.data?.jobs.map((job, index, all) => (
-          // Jobs arrive newest first, so the first row for a product is its current one.
-          <JobCard key={job.id} job={job} isCurrent={all.findIndex((other) => other.product_id === job.product_id) === index} onChange={jobs.refresh} />
-        ))}
       </section>
     </div>
   );
 }
 
-function JobCard({ job, isCurrent, onChange }: { job: JobRow; isCurrent: boolean; onChange: () => Promise<void> }) {
-  const [urls, setUrls] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const title = job.product_name || "Product from your upload";
-  // Older rows for a product are history, so only the current one offers actions.
-  const canAct = isCurrent && job.product_stage === job.status.toLowerCase();
-
-  async function rerun(pasted?: string) {
-    setBusy(true);
-    setError(null);
-    try {
-      await api(`/api/products/${job.product_id}/research`, { json: { urls: pasted } });
-      setUrls("");
-      await onChange();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
+function DropIcon() {
   return (
-    <article className="card job" data-testid="job" data-status={job.status}>
-      <div className="row row-between">
-        <strong>{title}</strong>
-        <span className={`pill pill-${job.status.toLowerCase()}`}>{STATUS_LABEL[job.status]}</span>
-      </div>
-      <p className="muted job-step">{job.step}</p>
-
-      {job.status === "BLOCKED" && (
-        <div className="notice notice-warn">
-          <p role="alert">{job.message}</p>
-          {canAct && (
-            <>
-              <label className="field">
-                <span>Product page URLs</span>
-                <textarea rows={3} value={urls} onChange={(e) => setUrls(e.target.value)} placeholder="One per line" data-testid="blocked-urls" />
-              </label>
-              <button className="btn btn-primary" disabled={busy || !urls.trim()} onClick={() => rerun(urls)}>
-                Continue with these URLs
-              </button>
-            </>
-          )}
-        </div>
-      )}
-      {job.status === "FAILED" && (
-        <div className="notice notice-error">
-          <p role="alert">{job.message}</p>
-          {canAct && (
-            <button className="btn" disabled={busy} onClick={() => rerun()}>
-              Try again
-            </button>
-          )}
-        </div>
-      )}
-      {job.status === "DONE" && job.product_stage === "review" && <Link href="/review">Open in Review</Link>}
-      {error && <p className="error" role="alert">{error}</p>}
-      {job.log.length > 0 && (
-        <details className="job-log">
-          <summary>Steps ({job.log.length})</summary>
-          <ol>
-            {job.log.map((entry, index) => (
-              <li key={index}>{entry.text}</li>
-            ))}
-          </ol>
-        </details>
-      )}
-    </article>
+    <svg className="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M3 16l5-5 4 4 3-3 6 6" />
+      <circle cx="9" cy="9" r="1.2" />
+    </svg>
   );
 }
