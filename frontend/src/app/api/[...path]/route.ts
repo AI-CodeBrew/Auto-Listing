@@ -60,8 +60,12 @@ async function forward(request: Request): Promise<Response> {
       ...(hasBody ? { duplex: "half" } : {}),
     } as RequestInit);
   } catch {
+    const error = process.env.BACKEND_URL
+      ? `The backend at ${BACKEND()} did not answer. Check that it is running.`
+      : "The backend is not running. Start it with: cd backend, then .venv\\Scripts\\python -m uvicorn app:app --port 8000 " +
+        "(online: set BACKEND_URL in the hosting settings).";
     return Response.json(
-      { error: "The backend is not running. Start it with: cd backend, then .venv\\Scripts\\python -m uvicorn app:app --port 8000" },
+      { error },
       { status: 502, headers: { "cache-control": "no-store" } },
     );
   }
