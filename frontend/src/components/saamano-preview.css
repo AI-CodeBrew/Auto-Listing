@@ -1,0 +1,8 @@
+/*
+ * The in-app Preview window around the Saamano product page. The page itself is styled by
+ * theme-templates/fynk-autolisting-product/assets/fynk-autolisting-product.css, the same file the store uses.
+ */
+.sp-overlay { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; background: rgba(10, 0, 69, 0.55); }
+.sp-bar { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 16px; background: var(--surface); color: var(--text); border-bottom: 1px solid var(--border); }
+.sp-bar p { font-size: 13px; }
+.sp-scroll { flex: 1; overflow: auto; }

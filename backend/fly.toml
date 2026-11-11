@@ -1,0 +1,40 @@
+# Fly.io settings for the backend. Deploy from the project folder (D:\Auto-listing):
+#   fly deploy . --config backend/fly.toml --dockerfile backend/Dockerfile --ha=false
+# Keys are Fly secrets (fly secrets import), never this file.
+
+# Change this if the name is taken. Use the same name in every fly command.
+app = "autolisting-backend"
+# Tokyo: the closest Fly region to the Supabase database (Seoul), because every database query
+# travels there. "fly platform regions" lists the others.
+primary_region = "nrt"
+# Extra memory on disk, so a busy moment in Chromium slows down instead of crashing.
+swap_size_mb = 512
+
+# No volume: the records are in Supabase (DATABASE_URL) and the photos and videos in Bunny
+# (BUNNY_*), both Fly secrets. The machine's own disk only holds files while a job works on them.
+[env]
+  APP_DATA_DIR = "/tmp/pla-data"
+  APP_STORAGE_DIR = "/tmp/pla-storage"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  # The machine stops when no requests reach it, so you pay only while the app is used. The next request
+  # starts it again in a few seconds. While research or a Shopify send runs, the backend keeps it on by
+  # itself (queue.py, _keep_awake). A job cut off anyway goes back in the queue at the next start.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    grace_period = "30s"
+    interval = "30s"
+    method = "GET"
+    path = "/api/status"
+    timeout = "5s"
+
+# Chromium opens one page at a time, so 512 MB with the swap above is enough. If "fly logs" shows
+# "Out of memory", raise it: fly scale memory 1024 -a autolisting-backend
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

@@ -1,0 +1,622 @@
+{%- comment -%}
+  FynkTech Saamano product page. A complete product page in one section, so it works in any
+  theme: it uses none of the theme's own snippets. The store's header, footer and every other
+  page stay as they are. Only products set to the "fynk-autolisting-product" template use this page.
+
+  Each product shows its own photos and its own text from these "saamano" product metafields,
+  written by the FynkTech listing app. A part with no text is hidden.
+    saamano.feature_heading / feature_subheading  single line   heading and line above the cards
+    saamano.features      list "title|text"     feature cards with a round photo
+    saamano.top_features_subheading  single line  line under the "Top Features" heading
+    saamano.top_features  list "title|text"     "Top Features": 4 cards, two each side of the third photo
+    saamano.highlights    list "title|text"     "Why you'll love it"
+    saamano.compare_intro multi line            text beside the comparison table
+    saamano.compare       list                  comparison rows
+    saamano.faq           list "question|answer"
+  Store-wide lines (delivery, bundle discount, badges) are this section's settings.
+  The bundle percentages must match automatic discounts set up in Shopify.
+
+  The styles are in assets/fynk-autolisting-product.css, the same file the app's Preview uses.
+{%- endcomment -%}
+{{ 'fynk-autolisting-product.css' | asset_url | stylesheet_tag }}
+
+{%- liquid
+  assign p = product
+  assign current_variant = p.selected_or_first_available_variant
+  assign mf = p.metafields.saamano
+  assign features = mf.features.value
+  assign feature_heading = mf.feature_heading.value
+  assign feature_subheading = mf.feature_subheading.value
+  assign highlights = mf.highlights.value
+  assign compare = mf.compare.value
+  assign compare_intro = mf.compare_intro.value
+  assign faq = mf.faq.value
+  assign photo_count = p.images.size
+  assign about_text = p.description | split: '<ul' | first | split: '<ol' | first
+  assign about_img = p.images[1] | default: p.featured_image
+  assign top_features = mf.top_features.value
+  assign top_features_sub = mf.top_features_subheading.value
+  assign top_img = p.images[2] | default: p.featured_image
+  assign form_id = 'fsp-form-' | append: section.id
+  assign default_qty = section.settings.default_qty | plus: 0
+  if section.settings.show_offer == false
+    assign default_qty = 1
+  endif
+  assign max_tier = 3
+  if section.settings.show_4
+    assign max_tier = 4
+  endif
+-%}
+
+<fynk-autolisting-product class="sp" data-section="{{ section.id }}">
+  {%- comment -%} Product information {%- endcomment -%}
+  <section class="sp-width sp-main">
+    <div class="sp-gallery">
+      {%- if photo_count == 0 -%}
+        <div class="sp-gallery-empty">{{ p.title | escape }}</div>
+      {%- endif -%}
+      {%- if photo_count > 1 -%}
+        <div class="sp-thumbs">
+          <button type="button" class="sp-thumbs__arrow" data-fsp-thumbs-prev aria-label="Earlier photos" hidden>
+            <span aria-hidden="true">&#8963;</span>
+          </button>
+          <div class="sp-thumbs__list" role="list" data-fsp-thumbs>
+            {%- for image in p.images -%}
+              <button
+                type="button"
+                role="listitem"
+                class="sp-thumb{% if forloop.first %} is-active{% endif %}"
+                data-fsp-thumb
+                data-large="{{ image | image_url: width: 1400 }}"
+                aria-label="Show photo {{ forloop.index }}"
+                {% if forloop.first %}aria-current="true"{% endif %}
+              >
+                {{ image | image_url: width: 160 | image_tag: loading: 'lazy', alt: '' }}
+              </button>
+            {%- endfor -%}
+          </div>
+          <button type="button" class="sp-thumbs__arrow" data-fsp-thumbs-next aria-label="More photos" hidden>
+            <span aria-hidden="true">&#8964;</span>
+          </button>
+        </div>
+      {%- endif -%}
+      {%- if photo_count > 0 -%}
+        <figure class="sp-gallery__main" data-fsp-main>
+          {{ p.featured_image | image_url: width: 1400 | image_tag: alt: p.title, fetchpriority: 'high' }}
+        </figure>
+      {%- endif -%}
+    </div>
+
+    <div class="sp-details">
+      <div class="sp-head">
+        <h1 class="sp-title">{{ p.title | escape }}</h1>
+        <p class="sp-price">
+          <span data-fsp-price>{{ current_variant.price | money }}</span>
+          {%- if current_variant.compare_at_price > current_variant.price -%}
+            <s class="so-card__was"> {{ current_variant.compare_at_price | money }}</s>
+          {%- endif -%}
+        </p>
+      </div>
+
+      {%- if p.description != blank -%}
+        <div class="sp-description sp-description--html">{{ p.description }}</div>
+      {%- endif -%}
+
+      {%- form 'product', p, id: form_id, class: 'sp-form', novalidate: 'novalidate', data-fsp-form: '' -%}
+        {%- if p.has_only_default_variant -%}
+          <input type="hidden" name="id" value="{{ current_variant.id }}">
+        {%- else -%}
+          <label class="sp-variant">
+            <span>Option</span>
+            <select name="id" data-fsp-variant>
+              {%- for v in p.variants -%}
+                <option value="{{ v.id }}" data-price="{{ v.price }}" data-price-text="{{ v.price | money | escape }}" {% if v.id == current_variant.id %}selected{% endif %} {% unless v.available %}disabled{% endunless %}>
+                  {{ v.title | escape }}{% unless v.available %} (Sold out){% endunless %}
+                </option>
+              {%- endfor -%}
+            </select>
+          </label>
+        {%- endif -%}
+
+        {%- if section.settings.show_offer -%}
+          <div class="so-offer" data-fsp-offer>
+            {%- if section.settings.offer_heading != blank -%}
+              <p class="so-offer__heading"><span>{{ section.settings.offer_heading | escape }}</span></p>
+            {%- endif -%}
+            <div class="so-offer__list" role="radiogroup" aria-label="{{ section.settings.offer_heading | default: 'Bundle and save' | escape }}">
+              {%- for qty in (1..max_tier) -%}
+                {%- liquid
+                  case qty
+                    when 2
+                      assign pct = section.settings.pct_2
+                      assign badge = section.settings.badge_2
+                    when 3
+                      assign pct = section.settings.pct_3
+                      assign badge = section.settings.badge_3
+                    when 4
+                      assign pct = section.settings.pct_4
+                      assign badge = section.settings.badge_4
+                    else
+                      assign pct = 0
+                      assign badge = ''
+                  endcase
+                  assign full = current_variant.price | times: qty
+                  assign keep = 100 | minus: pct
+                  assign deal = full | times: keep | divided_by: 100
+                  assign save = full | minus: deal
+                -%}
+                <label class="so-card{% if qty == default_qty %} is-selected{% endif %}" data-qty="{{ qty }}" data-pct="{{ pct }}">
+                  <input type="radio" name="fsp-tier-{{ section.id }}" value="{{ qty }}" {% if qty == default_qty %}checked{% endif %}>
+                  {%- if badge != blank -%}<span class="so-card__badge">{{ badge | escape }}</span>{%- endif -%}
+                  <span class="so-card__dot" aria-hidden="true"></span>
+                  <span class="so-card__thumbs" aria-hidden="true">
+                    {%- if p.featured_image -%}
+                      {%- for i in (1..qty) -%}{{ p.featured_image | image_url: width: 80 | image_tag: loading: 'lazy', alt: '' }}{%- endfor -%}
+                    {%- endif -%}
+                  </span>
+                  <span class="so-card__main">
+                    <span class="so-card__label">Buy {{ qty }}</span>
+                    {%- if qty > 1 -%}
+                      <span class="so-card__save">You save <span data-fsp-save>{{ save | money }}</span> ({{ pct }}% off)</span>
+                    {%- else -%}
+                      <span class="so-card__save so-card__save--muted">Standard price</span>
+                    {%- endif -%}
+                  </span>
+                  <span class="so-card__prices">
+                    <span class="so-card__price" data-fsp-deal>{{ deal | money }}</span>
+                    {%- if qty > 1 -%}<s class="so-card__was" data-fsp-full>{{ full | money }}</s>{%- endif -%}
+                  </span>
+                </label>
+              {%- endfor -%}
+            </div>
+            {%- if section.settings.offer_note != blank -%}
+              <p class="so-offer__note">{{ section.settings.offer_note | escape }}</p>
+            {%- endif -%}
+          </div>
+        {%- endif -%}
+
+        <div class="sp-buy">
+          <div class="sp-qty" role="group" aria-label="Quantity">
+            <button type="button" data-fsp-minus aria-label="One less">&#8722;</button>
+            <input type="number" name="quantity" value="{{ default_qty }}" min="1" max="99" inputmode="numeric" aria-label="Quantity" data-fsp-qty>
+            <button type="button" data-fsp-plus aria-label="One more">+</button>
+          </div>
+          <button type="submit" name="add" class="sp-button" {% unless current_variant.available %}disabled{% endunless %} data-fsp-add>
+            {%- if current_variant.available -%}Add to cart{%- else -%}Sold out{%- endif -%}
+          </button>
+          {%- if section.settings.show_buy_now -%}
+            {{ form | payment_button }}
+          {%- endif -%}
+        </div>
+      {%- endform -%}
+
+      {%- if section.settings.delivery_1 != blank or section.settings.delivery_2 != blank -%}
+        <ul class="sp-delivery">
+          {%- if section.settings.delivery_1 != blank -%}<li>{{ section.settings.delivery_1 | escape }}</li>{%- endif -%}
+          {%- if section.settings.delivery_2 != blank -%}<li>{{ section.settings.delivery_2 | escape }}</li>{%- endif -%}
+        </ul>
+      {%- endif -%}
+
+      <div class="sa-box">
+        <ul class="sa-badges">
+          {%- if section.settings.badge_cod != blank -%}
+            <li><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg><span>{{ section.settings.badge_cod | escape }}</span></li>
+          {%- endif -%}
+          {%- if section.settings.badge_delivery != blank -%}
+            <li><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h11v10H3z"/><path d="M14 9h4l3 3v4h-7"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg><span>{{ section.settings.badge_delivery | escape }}</span></li>
+          {%- endif -%}
+          {%- if section.settings.badge_offer != blank -%}
+            <li><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/></svg><span>{{ section.settings.badge_offer | escape }}</span></li>
+          {%- endif -%}
+        </ul>
+                  <ol class="sa-steps">
+            <li><span class="sa-steps__dot"></span>Order placed</li>
+            <li><span class="sa-steps__dot"></span>Dispatched</li>
+            <li><span class="sa-steps__dot"></span>Pay at your door</li>
+          </ol>
+        
+      </div>
+    </div>
+  </section>
+
+  {%- comment -%} Product story {%- endcomment -%}
+  <div class="ss-story">
+    {%- if section.settings.marquee_text != blank -%}
+      {%- assign words = section.settings.marquee_text | split: '|' -%}
+      <div class="ss-marquee" aria-hidden="true">
+        <div class="ss-marquee__track">
+          {%- for r in (1..4) -%}
+            {%- for w in words -%}<span>{{ w | strip | escape }}</span><i></i>{%- endfor -%}
+          {%- endfor -%}
+        </div>
+      </div>
+    {%- endif -%}
+
+    <div class="sp-width ss-wrap">
+      {%- if features.size > 0 -%}
+        <div class="sf">
+          {%- if feature_heading != blank -%}<h2 class="sf-title">{{ feature_heading | escape }}</h2>{%- endif -%}
+          {%- if feature_subheading != blank -%}<p class="sf-sub">{{ feature_subheading | escape }}</p>{%- endif -%}
+          <div class="sf-track" data-fsp-cards>
+            {%- for f in features limit: 5 -%}
+              {%- assign parts = f | split: '|' -%}
+              <div class="sf-card">
+                <span class="sf-photo">
+                  {%- if photo_count > 0 -%}
+                    {%- comment -%} The main photo is already large at the top, so the cards start from the second. {%- endcomment -%}
+                    {%- assign pi = forloop.index | modulo: photo_count -%}
+                    {{ p.images[pi] | image_url: width: 400 | image_tag: loading: 'lazy', alt: '' }}
+                  {%- endif -%}
+                </span>
+                <h3>{{ parts[0] | strip | escape }}</h3>
+                {%- if parts[1] -%}<p>{{ parts[1] | strip | escape }}</p>{%- endif -%}
+              </div>
+            {%- endfor -%}
+          </div>
+          <div class="sf-arrows" data-fsp-card-arrows hidden>
+            <button type="button" data-fsp-card-prev aria-label="Previous">&#8249;</button>
+            <button type="button" data-fsp-card-next aria-label="Next">&#8250;</button>
+          </div>
+        </div>
+      {%- endif -%}
+
+      {%- if about_img or about_text != blank -%}
+        <div class="ss-how">
+          <div class="ss-how__media">
+            {%- if about_img -%}{{ about_img | image_url: width: 900 | image_tag: loading: 'lazy', alt: p.title, class: 'ss-how__img' }}{%- endif -%}
+          </div>
+          <div>
+            <p class="ss-eyebrow">{{ section.settings.about_eyebrow | escape }}</p>
+            <h2 class="ss-title">{{ p.title | escape }}</h2>
+            {%- if about_text != blank -%}<div class="ss-about__text">{{ about_text }}</div>{%- endif -%}
+            <button type="button" class="ss-cta" data-fsp-to-buy>{{ section.settings.cta_label | escape }}</button>
+          </div>
+        </div>
+      {%- endif -%}
+
+      {%- comment -%} Top Features: two cards each side of a large photo (the third, after the main and About photos) {%- endcomment -%}
+      {%- if top_features.size > 0 -%}
+        <div class="stf">
+          {%- if section.settings.top_features_title != blank -%}<h2 class="stf-title">{{ section.settings.top_features_title | escape }}</h2>{%- endif -%}
+          {%- if top_features_sub != blank -%}<p class="stf-sub">{{ top_features_sub | escape }}</p>{%- endif -%}
+          <div class="stf-grid{% unless top_img %} stf-grid--no-photo{% endunless %}">
+            <div class="stf-col">
+              {%- for f in top_features limit: 2 -%}
+                {%- assign parts = f | split: '|' -%}
+                <div class="stf-card">
+                  <h3>{{ parts[0] | strip | escape }}</h3>
+                  {%- if parts[1] -%}<p>{{ parts[1] | strip | escape }}</p>{%- endif -%}
+                </div>
+              {%- endfor -%}
+            </div>
+            {%- if top_img -%}
+              <div class="stf-media">{{ top_img | image_url: width: 900 | image_tag: loading: 'lazy', alt: p.title, class: 'stf-img' }}</div>
+            {%- endif -%}
+            <div class="stf-col">
+              {%- for f in top_features offset: 2 limit: 2 -%}
+                {%- assign parts = f | split: '|' -%}
+                <div class="stf-card">
+                  <h3>{{ parts[0] | strip | escape }}</h3>
+                  {%- if parts[1] -%}<p>{{ parts[1] | strip | escape }}</p>{%- endif -%}
+                </div>
+              {%- endfor -%}
+            </div>
+          </div>
+        </div>
+      {%- endif -%}
+
+      {%- if highlights.size > 0 -%}
+        <div>
+          <p class="ss-eyebrow">{{ section.settings.highlights_eyebrow | escape }}</p>
+          <h2 class="ss-title">{{ section.settings.highlights_title | escape }}</h2>
+          <ul class="ss-highlights">
+            {%- for h in highlights limit: 4 -%}
+              {%- assign parts = h | split: '|' -%}
+              <li class="ss-hl ss-hl--{{ forloop.index0 | modulo: 4 }}">
+                {%- if photo_count > 0 -%}
+                  {%- assign pi = forloop.index | modulo: photo_count -%}
+                  <span class="ss-hl__photo">{{ p.images[pi] | image_url: width: 500 | image_tag: loading: 'lazy', alt: '' }}</span>
+                {%- endif -%}
+                <strong>{{ parts[0] | strip | escape }}</strong>
+                {%- if parts[1] -%}<span>{{ parts[1] | strip | escape }}</span>{%- endif -%}
+              </li>
+            {%- endfor -%}
+          </ul>
+        </div>
+      {%- endif -%}
+
+      {%- if compare.size > 0 -%}
+        <div class="sw">
+          <div>
+            <h2 class="sw-title">{{ section.settings.compare_title | escape }}</h2>
+            {%- if compare_intro != blank -%}<p class="sw-text">{{ compare_intro | escape | newline_to_br }}</p>{%- endif -%}
+            <button type="button" class="sw-btn" data-fsp-to-buy>{{ section.settings.compare_button | escape }}</button>
+          </div>
+          <table class="sw-table">
+            <thead>
+              <tr>
+                <th scope="col">Features</th>
+                <th scope="col" class="sw-us">
+                  {%- if p.featured_image -%}
+                    {{ p.featured_image | image_url: width: 200 | image_tag: loading: 'lazy', alt: p.title }}
+                  {%- else -%}
+                    Ours
+                  {%- endif -%}
+                </th>
+                <th scope="col">{{ section.settings.compare_them_label | escape }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {%- for row in compare limit: 6 -%}
+                <tr>
+                  <th scope="row">{{ row | strip | escape }}</th>
+                  <td class="sw-us"><span class="sw-yes" aria-label="Yes">&#10003;</span></td>
+                  <td><span class="sw-no" aria-label="No">&#10005;</span></td>
+                </tr>
+              {%- endfor -%}
+            </tbody>
+          </table>
+        </div>
+      {%- endif -%}
+
+      {%- if faq.size > 0 -%}
+        <div class="ss-faq">
+          <p class="ss-eyebrow">{{ section.settings.faq_eyebrow | escape }}</p>
+          <h2 class="ss-title">{{ section.settings.faq_title | escape }}</h2>
+          {%- for f in faq limit: 8 -%}
+            {%- assign parts = f | split: '|' -%}
+            <details class="ss-faq__item">
+              <summary><span>{{ parts[0] | strip | escape }}</span><i aria-hidden="true"></i></summary>
+              {%- if parts[1] -%}<p>{{ parts[1] | strip | escape }}</p>{%- endif -%}
+            </details>
+          {%- endfor -%}
+        </div>
+      {%- endif -%}
+    </div>
+  </div>
+
+  {%- comment -%} Bundle banner, with the product's photos in the shapes {%- endcomment -%}
+  {%- if section.settings.show_bundle -%}
+    <div class="sb-cta sp-width">
+      <div class="sb-cta__card">
+        <div class="sb-cta__blocks" aria-hidden="true">
+          {%- for n in (1..6) -%}
+            <span class="sb-b sb-b--{{ n }}">
+              {%- if photo_count > 0 -%}
+                {%- assign bi = forloop.index0 | modulo: photo_count -%}
+                {{ p.images[bi] | image_url: width: 200 | image_tag: loading: 'lazy', alt: '' }}
+              {%- endif -%}
+            </span>
+          {%- endfor -%}
+        </div>
+        <div>
+          <p class="sb-cta__eyebrow">Mix and match</p>
+          <h2 class="sb-cta__title">{{ section.settings.bundle_heading | escape }}</h2>
+          {%- if section.settings.bundle_text != blank -%}<p class="sb-cta__text">{{ section.settings.bundle_text | escape }}</p>{%- endif -%}
+          <ol class="sb-cta__steps">
+            <li><span>1</span>Pick 2, 3 or 4+ items</li>
+            <li><span>2</span>Your discount applies automatically</li>
+            <li><span>3</span>Pay cash on delivery</li>
+          </ol>
+          {%- if section.settings.bundle_button != blank -%}
+            <a class="sb-cta__btn" href="{{ section.settings.bundle_link | default: routes.all_products_collection_url }}">{{ section.settings.bundle_button | escape }}</a>
+          {%- endif -%}
+        </div>
+      </div>
+    </div>
+  {%- endif -%}
+
+  {%- comment -%} You may also like: other products from this product's first collection {%- endcomment -%}
+  {%- assign related_from = section.settings.related_collection | default: p.collections.first -%}
+  {%- if section.settings.show_related and related_from != blank and related_from.products_count > 1 -%}
+    <section class="sp-width sp-related">
+      <h3>You may also like</h3>
+      <div class="sp-related-grid">
+        {%- assign shown = 0 -%}
+        {%- for item in related_from.products limit: 12 -%}
+          {%- if item.id != p.id and shown < 4 -%}
+            {%- assign shown = shown | plus: 1 -%}
+            <a class="sp-card" href="{{ item.url }}">
+              <span class="sp-card__img">
+                {%- if item.featured_image -%}{{ item.featured_image | image_url: width: 500 | image_tag: loading: 'lazy', alt: item.title }}{%- endif -%}
+              </span>
+              <span class="sp-card__title">{{ item.title | escape }}</span>
+              <span class="sp-card__price">{{ item.price | money }}</span>
+            </a>
+          {%- endif -%}
+        {%- endfor -%}
+      </div>
+    </section>
+  {%- endif -%}
+</fynk-autolisting-product>
+
+<script>
+  if (!customElements.get('fynk-autolisting-product')) {
+    customElements.define('fynk-autolisting-product', class extends HTMLElement {
+      connectedCallback() {
+        this.form = this.querySelector('[data-fsp-form]');
+        this.qty = this.querySelector('[data-fsp-qty]');
+        this.cards = Array.from(this.querySelectorAll('.so-card'));
+        this.setupGallery();
+        this.setupQuantity();
+        this.setupVariant();
+        this.setupCards();
+        this.querySelectorAll('[data-fsp-to-buy]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const target = this.querySelector('[data-fsp-offer]') || this.form;
+            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          });
+        });
+      }
+
+      /* A thumbnail shows its photo large. The column shows 6 at a time; the arrows move it. */
+      setupGallery() {
+        const main = this.querySelector('[data-fsp-main] img');
+        const list = this.querySelector('[data-fsp-thumbs]');
+        if (!main || !list) return;
+        const thumbs = Array.from(list.querySelectorAll('[data-fsp-thumb]'));
+        thumbs.forEach((thumb) => {
+          thumb.addEventListener('click', () => {
+            main.removeAttribute('srcset');
+            main.src = thumb.dataset.large;
+            thumbs.forEach((other) => {
+              other.classList.toggle('is-active', other === thumb);
+              if (other === thumb) other.setAttribute('aria-current', 'true');
+              else other.removeAttribute('aria-current');
+            });
+          });
+        });
+        const prev = this.querySelector('[data-fsp-thumbs-prev]');
+        const next = this.querySelector('[data-fsp-thumbs-next]');
+        const vertical = () => getComputedStyle(list).flexDirection === 'column';
+        const step = () => (thumbs[0] ? (vertical() ? thumbs[0].offsetHeight : thumbs[0].offsetWidth) + 8 : 0);
+        const update = () => {
+          const more = vertical() ? list.scrollHeight > list.clientHeight + 2 : list.scrollWidth > list.clientWidth + 2;
+          prev.hidden = next.hidden = !more;
+          const pos = vertical() ? list.scrollTop : list.scrollLeft;
+          const end = vertical() ? list.scrollHeight - list.clientHeight : list.scrollWidth - list.clientWidth;
+          prev.disabled = pos <= 2;
+          next.disabled = pos >= end - 2;
+        };
+        const move = (direction) => {
+          const amount = direction * step();
+          list.scrollBy(vertical() ? { top: amount, behavior: 'smooth' } : { left: amount, behavior: 'smooth' });
+        };
+        prev.addEventListener('click', () => move(-1));
+        next.addEventListener('click', () => move(1));
+        list.addEventListener('scroll', update, { passive: true });
+        window.addEventListener('resize', update);
+        update();
+      }
+
+      /* The bundle cards and the quantity box stay in step: picking Buy 3 sets 3, and 3 picks Buy 3. */
+      setupQuantity() {
+        if (!this.qty) return;
+        const pick = (qty) => {
+          const tier = Math.min(qty, this.cards.length);
+          this.cards.forEach((card) => {
+            const on = Number(card.dataset.qty) === tier;
+            card.classList.toggle('is-selected', on);
+            card.querySelector('input').checked = on;
+          });
+        };
+        const set = (value) => {
+          const qty = Math.max(1, Math.min(99, Number(value) || 1));
+          this.qty.value = qty;
+          pick(qty);
+        };
+        this.cards.forEach((card) => {
+          card.querySelector('input').addEventListener('change', () => set(card.dataset.qty));
+        });
+        this.querySelector('[data-fsp-minus]').addEventListener('click', () => set(Number(this.qty.value) - 1));
+        this.querySelector('[data-fsp-plus]').addEventListener('click', () => set(Number(this.qty.value) + 1));
+        this.qty.addEventListener('change', () => set(this.qty.value));
+        set(this.qty.value);
+      }
+
+      /* Another variant changes the price shown and the bundle card prices. */
+      setupVariant() {
+        const select = this.querySelector('[data-fsp-variant]');
+        if (!select) return;
+        const priceText = this.querySelector('[data-fsp-price]');
+        const format = (cents, sample) => {
+          // Keeps the store's own currency format by swapping the number in a price it printed.
+          const amount = (cents / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+          return sample.replace(/[\d.,]+/, amount);
+        };
+        select.addEventListener('change', () => {
+          const option = select.selectedOptions[0];
+          const cents = Number(option.dataset.price);
+          const sample = option.dataset.priceText;
+          if (priceText) priceText.textContent = sample;
+          this.cards.forEach((card) => {
+            const qty = Number(card.dataset.qty);
+            const pct = Number(card.dataset.pct) || 0;
+            const full = cents * qty;
+            const deal = Math.round((full * (100 - pct)) / 100);
+            const d = card.querySelector('[data-fsp-deal]');
+            const f = card.querySelector('[data-fsp-full]');
+            const s = card.querySelector('[data-fsp-save]');
+            if (d) d.textContent = format(deal, sample);
+            if (f) f.textContent = format(full, sample);
+            if (s) s.textContent = format(full - deal, sample);
+          });
+        });
+      }
+
+      /* Feature cards scroll sideways. The arrows show only when some cards are out of view. */
+      setupCards() {
+        const track = this.querySelector('[data-fsp-cards]');
+        const arrows = this.querySelector('[data-fsp-card-arrows]');
+        if (!track || !arrows) return;
+        const prev = arrows.querySelector('[data-fsp-card-prev]');
+        const next = arrows.querySelector('[data-fsp-card-next]');
+        const update = () => {
+          arrows.hidden = !(track.scrollWidth > track.clientWidth + 2);
+          prev.disabled = track.scrollLeft <= 2;
+          next.disabled = track.scrollLeft + track.clientWidth >= track.scrollWidth - 2;
+        };
+        const move = (direction) => {
+          const card = track.querySelector('.sf-card');
+          if (card) track.scrollBy({ left: direction * (card.offsetWidth + 20), behavior: 'smooth' });
+        };
+        prev.addEventListener('click', () => move(-1));
+        next.addEventListener('click', () => move(1));
+        track.addEventListener('scroll', update, { passive: true });
+        window.addEventListener('resize', update);
+        update();
+      }
+    });
+  }
+</script>
+
+{% schema %}
+{
+  "name": "Saamano product page",
+  "tag": "section",
+  "class": "fynk-autolisting-product-section",
+  "enabled_on": { "templates": ["product"] },
+  "settings": [
+    { "type": "header", "content": "Bundle offer" },
+    { "type": "checkbox", "id": "show_offer", "label": "Show bundle cards", "default": true },
+    { "type": "text", "id": "offer_heading", "label": "Heading", "default": "Bundle and save" },
+    { "type": "range", "id": "pct_2", "label": "Discount for 2 items", "info": "Each percentage must match an automatic discount in Shopify, or customers will not get it at checkout.", "min": 0, "max": 60, "step": 1, "unit": "%", "default": 20 },
+    { "type": "range", "id": "pct_3", "label": "Discount for 3 items", "min": 0, "max": 60, "step": 1, "unit": "%", "default": 25 },
+    { "type": "range", "id": "pct_4", "label": "Discount for 4 items", "min": 0, "max": 60, "step": 1, "unit": "%", "default": 30 },
+    { "type": "checkbox", "id": "show_4", "label": "Show the Buy 4 card", "default": true },
+    { "type": "select", "id": "default_qty", "label": "Picked at first", "default": "2", "options": [ { "value": "1", "label": "Buy 1" }, { "value": "2", "label": "Buy 2" }, { "value": "3", "label": "Buy 3" } ] },
+    { "type": "text", "id": "badge_2", "label": "Badge: 2 items", "default": "Most popular" },
+    { "type": "text", "id": "badge_3", "label": "Badge: 3 items", "default": "Save more" },
+    { "type": "text", "id": "badge_4", "label": "Badge: 4 items", "default": "Best value" },
+    { "type": "text", "id": "offer_note", "label": "Note under the cards", "default": "Discount applies automatically at checkout. Mix any products to reach the tier." },
+    { "type": "header", "content": "Buying" },
+    { "type": "checkbox", "id": "show_buy_now", "label": "Show the Buy it now button", "default": true },
+    { "type": "text", "id": "delivery_1", "label": "Delivery line 1", "default": "Cash on delivery, pay at your door" },
+    { "type": "text", "id": "delivery_2", "label": "Delivery line 2", "default": "Rs 250 delivery all over Pakistan" },
+    { "type": "text", "id": "badge_cod", "label": "Badge 1", "default": "Cash on delivery" },
+    { "type": "text", "id": "badge_delivery", "label": "Badge 2", "default": "Rs 250 delivery, all Pakistan" },
+    { "type": "text", "id": "badge_offer", "label": "Badge 3", "default": "Up to 30% off bundles" },
+    { "type": "header", "content": "Story" },
+    { "type": "text", "id": "marquee_text", "label": "Scrolling band (separate with |)", "default": "Cash on delivery | Rs 250 delivery all over Pakistan | Buy 2 save 20% | Buy 3 save 25% | Buy 4 save 30%" },
+    { "type": "text", "id": "about_eyebrow", "label": "About eyebrow", "default": "About this product" },
+    { "type": "text", "id": "cta_label", "label": "About button", "default": "Order now, pay on delivery" },
+    { "type": "text", "id": "top_features_title", "label": "Top features heading", "default": "Top Features" },
+    { "type": "text", "id": "highlights_eyebrow", "label": "Highlights eyebrow", "default": "Why you'll love it" },
+    { "type": "text", "id": "highlights_title", "label": "Highlights heading", "default": "Made to make everyday life easier" },
+    { "type": "text", "id": "compare_title", "label": "Comparison heading", "default": "Why Choose Us?" },
+    { "type": "text", "id": "compare_button", "label": "Comparison button", "default": "Shop now" },
+    { "type": "text", "id": "compare_them_label", "label": "Comparison: other column", "default": "Others" },
+    { "type": "text", "id": "faq_eyebrow", "label": "FAQ eyebrow", "default": "Questions" },
+    { "type": "text", "id": "faq_title", "label": "FAQ heading", "default": "Good to know" },
+    { "type": "header", "content": "Bundle banner" },
+    { "type": "checkbox", "id": "show_bundle", "label": "Show the bundle banner", "default": true },
+    { "type": "text", "id": "bundle_heading", "label": "Heading", "default": "Buy more, save up to 30%" },
+    { "type": "textarea", "id": "bundle_text", "label": "Text", "default": "2 items get 20% off, 3 items get 25% and 4 or more get 30%. Mix any products, and the discount is applied automatically at checkout." },
+    { "type": "text", "id": "bundle_button", "label": "Button label", "default": "Build your bundle" },
+    { "type": "url", "id": "bundle_link", "label": "Button link" },
+    { "type": "header", "content": "You may also like" },
+    { "type": "checkbox", "id": "show_related", "label": "Show other products", "default": true },
+    { "type": "collection", "id": "related_collection", "label": "Collection", "info": "Leave empty to use the product's first collection." }
+  ]
+}
+{% endschema %}

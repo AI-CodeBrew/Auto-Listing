@@ -1,0 +1,10 @@
+# Only for "fly deploy" of the backend (backend/Dockerfile). Everything is left out except the
+# files the image needs, so keys (.env), your data and node_modules are never uploaded.
+*
+!backend/requirements.txt
+!backend/app.py
+!backend/schema.sql
+!backend/pla
+!frontend/theme-templates
+**/__pycache__
+**/*.pyc

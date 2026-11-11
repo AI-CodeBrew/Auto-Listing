@@ -1,0 +1,3 @@
+# Theme files are uploaded to Shopify byte for byte. Git must not change their line endings,
+# or every file would look changed to Shopify and the checksums would never match.
+theme-templates/** -text

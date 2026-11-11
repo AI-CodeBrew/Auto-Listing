@@ -1,0 +1,9 @@
+{
+  "sections": {
+    "main": {
+      "type": "fynk-autolisting-product",
+      "settings": {}
+    }
+  },
+  "order": ["main"]
+}
