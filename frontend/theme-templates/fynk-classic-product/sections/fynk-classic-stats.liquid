@@ -1,0 +1,56 @@
+{%- comment -%}
+  FynkTech Classic product page, part 3: a colored band with three big figures.
+  They are set here in the theme editor (store-wide), so no figure is invented for a product.
+{%- endcomment -%}
+{%- capture au_html -%}
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=DM+Sans:wght@400;500;600&display=swap">
+<section class="au-stats" style="background: {{ section.settings.band_color }};">
+  {%- for block in section.blocks -%}
+    <div {{ block.shopify_attributes }}><strong>{{ block.settings.value | escape }}</strong><p>{{ block.settings.label | escape }}</p></div>
+  {%- endfor -%}
+</section>
+<style>
+  .au-stats { color: #222; font-family: "DM Sans", sans-serif; display: grid; grid-template-columns: repeat(3, 1fr); }
+  .au-stats div { padding: 48px 24px; text-align: center; }
+  .au-stats strong { display: block; font-family: "Cormorant Garamond", serif; font-weight: 500; font-size: 72px; line-height: 1; }
+  .au-stats p { margin: 8px auto 0; max-width: 220px; font-size: 14px; line-height: 1.45; }
+  @media (max-width: 800px) { .au-stats { grid-template-columns: 1fr; } .au-stats strong { font-size: 56px; } }
+</style>
+{%- endcapture -%}
+{%- if au_html contains 'ا' or au_html contains 'ل' or au_html contains 'ي' or au_html contains 'ة' -%}
+<div class="au-rtl" dir="rtl" style="display: contents">{{ au_html }}</div>
+{%- else -%}
+{{ au_html }}
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Classic - Figures",
+  "tag": "section",
+  "class": "fynk-classic-section",
+  "settings": [
+    { "type": "color", "id": "band_color", "label": "Band color", "default": "#D6E6C6" }
+  ],
+  "blocks": [
+    {
+      "type": "stat",
+      "name": "Figure",
+      "limit": 3,
+      "settings": [
+        { "type": "text", "id": "value", "label": "Big text", "default": "100%" },
+        { "type": "text", "id": "label", "label": "Small text", "default": "secure checkout" }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Classic - Figures",
+      "blocks": [
+        { "type": "stat" },
+        { "type": "stat" },
+        { "type": "stat" }
+      ]
+    }
+  ]
+}
+{% endschema %}

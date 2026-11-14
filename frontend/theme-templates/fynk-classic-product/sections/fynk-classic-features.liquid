@@ -1,0 +1,115 @@
+{%- comment -%}
+  FynkTech Classic product page, part 4: a big heading with the product's photos and three features with
+  small round pictures. The text comes from the product's own "saamano.top_features" (list of "title|text"),
+  "saamano.top_features_subheading" and "saamano.compare_intro" metafields, written by the FynkTech app.
+  The section is hidden when a product has no such text.
+{%- endcomment -%}
+{%- capture au_html -%}
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=DM+Sans:wght@400;500;600&display=swap">
+{%- liquid
+  assign p = product
+  assign mf = p.metafields.saamano
+  assign items = mf.top_features.value
+  if items == blank
+    assign items = mf.features.value
+  endif
+  assign heading = mf.top_features_subheading.value
+  assign intro = mf.compare_intro.value
+  assign bottle = p.images[2] | default: p.featured_image
+  assign side = p.images[3] | default: p.images[1] | default: p.featured_image
+-%}
+{%- if items != blank -%}
+<section class="au-ing">
+  <div class="au-ing-col">
+    <div class="au-ing-copy">
+      <p>{{ section.settings.kicker | escape }}</p>
+      {%- if heading != blank -%}<h2>{{ heading | escape }}</h2>{%- else -%}<h2>{{ p.title | escape }}</h2>{%- endif -%}
+      {%- if intro != blank -%}<span>{{ intro | escape }}</span>{%- endif -%}
+    </div>
+    {%- if bottle != blank -%}<img class="au-ing-photo" src="{{ bottle | image_url: width: 1400 }}" alt="{{ p.title | escape }}" loading="lazy">{%- endif -%}
+  </div>
+  <div class="au-ing-col">
+    {%- if side != blank -%}<img class="au-ing-side" src="{{ side | image_url: width: 1200 }}" alt="" loading="lazy">{%- endif -%}
+    <ul>
+      {%- for entry in items limit: 3 -%}
+        {%- assign parts = entry | split: '|' -%}
+        {%- assign title = parts | first -%}
+        {%- assign text = entry | remove_first: title | remove_first: '|' -%}
+        <li>
+          {%- case forloop.index -%}
+            {%- when 1 -%}
+              <svg viewBox="0 0 120 120" aria-hidden="true">
+                <circle cx="48" cy="54" r="26" fill="#e7b7b4"/>
+                <circle cx="78" cy="46" r="18" fill="#f3d2cb"/>
+                <circle cx="72" cy="78" r="16" fill="#d99596"/>
+                <circle cx="38" cy="82" r="10" fill="#f6e4dc"/>
+                <circle cx="58" cy="40" r="6" fill="#fff" opacity=".7"/>
+              </svg>
+            {%- when 2 -%}
+              <svg viewBox="0 0 120 120" aria-hidden="true">
+                <path d="M44 22c10 16 22 34 22 48a22 22 0 1 1-44 0c0-14 12-32 22-48z" fill="#f3ddb0"/>
+                <path d="M82 38c7 12 15 24 15 34a15 15 0 1 1-30 0c0-10 8-22 15-34z" fill="#e7c98a"/>
+                <ellipse cx="40" cy="58" rx="5" ry="9" fill="#fff" opacity=".65"/>
+                <ellipse cx="78" cy="64" rx="3.5" ry="6" fill="#fff" opacity=".55"/>
+              </svg>
+            {%- else -%}
+              <svg viewBox="0 0 120 120" aria-hidden="true">
+                <path d="M16 46c24-20 64-20 88 2" fill="none" stroke="#e4d3c4" stroke-width="12" stroke-linecap="round"/>
+                <path d="M20 66c22-16 58-16 80 4" fill="none" stroke="#f0e4d8" stroke-width="10" stroke-linecap="round"/>
+                <path d="M26 86c18-12 50-10 68 6" fill="none" stroke="#cbb5a2" stroke-width="8" stroke-linecap="round"/>
+              </svg>
+          {%- endcase -%}
+          <div><strong>{{ title | escape }}</strong>{%- if text != blank -%}<span>{{ text | escape }}</span>{%- endif -%}</div>
+        </li>
+      {%- endfor -%}
+    </ul>
+  </div>
+</section>
+<style>
+  .au-ing { background: #fff; color: #111; font-family: "DM Sans", sans-serif; width: min(1240px, calc(100% - 48px)); margin: 0 auto; padding: 0 0 88px; display: grid; grid-template-columns: 605px minmax(0, 1fr); column-gap: 32px; align-items: start; }
+  .au-ing-col { display: flex; flex-direction: column; min-width: 0; }
+  .au-ing-col:first-child { padding-top: 80px; gap: 100px; }
+  .au-ing-col:last-child { padding-inline-start: 100px; gap: 100px; align-items: flex-end; }
+  .au-ing-copy { max-width: 604px; }
+  .au-ing-copy p { margin: 0 0 12px; letter-spacing: 0.9px; text-transform: uppercase; font-size: 18px; font-weight: 500; line-height: 1.55; }
+  .au-ing h2 { font-family: "Cormorant Garamond", serif; font-weight: 500; font-size: 56px; line-height: 1.21; margin: 0 0 12px; }
+  .au-ing-copy span { display: block; font-size: 20px; line-height: 1.5; color: #111; }
+  .au-ing-photo { width: 605px; max-width: 100%; aspect-ratio: 1210 / 1540; object-fit: cover; display: block; }
+  .au-ing-side { width: 500px; max-width: 100%; aspect-ratio: 1 / 1; object-fit: cover; display: block; }
+  .au-ing ul { list-style: none; margin: 0; padding: 0; width: 500px; max-width: 100%; display: flex; flex-direction: column; gap: 28px; }
+  .au-ing li { display: grid; grid-template-columns: 100px 1fr; gap: 24px; align-items: center; }
+  .au-ing svg { width: 100px; height: 100px; }
+  .au-ing strong { display: block; text-transform: uppercase; font-size: 32px; font-weight: 500; line-height: 1.375; margin-bottom: 8px; letter-spacing: 0; }
+  .au-ing li span { display: block; font-size: 16px; line-height: 1.625; color: #111; max-width: 380px; }
+  @media (max-width: 1100px) {
+    .au-ing { grid-template-columns: 1fr 1fr; }
+    .au-ing-col:last-child { padding-inline-start: 24px; }
+    .au-ing-photo, .au-ing-side, .au-ing ul { width: 100%; }
+  }
+  @media (max-width: 800px) {
+    .au-ing { grid-template-columns: 1fr; width: calc(100% - 32px); row-gap: 32px; }
+    .au-ing-col:first-child { padding-top: 32px; gap: 32px; }
+    .au-ing-col:last-child { padding-inline-start: 0; gap: 32px; align-items: stretch; }
+    .au-ing h2 { font-size: 42px; }
+    .au-ing strong { font-size: 22px; }
+  }
+</style>
+{%- endif -%}
+{%- endcapture -%}
+{%- if au_html contains 'ا' or au_html contains 'ل' or au_html contains 'ي' or au_html contains 'ة' -%}
+<div class="au-rtl" dir="rtl" style="display: contents">{{ au_html }}</div>
+{%- else -%}
+{{ au_html }}
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Classic - Top features",
+  "tag": "section",
+  "class": "fynk-classic-section",
+  "settings": [
+    { "type": "text", "id": "kicker", "label": "Small heading", "default": "Top features" }
+  ],
+  "presets": [{ "name": "Classic - Top features" }]
+}
+{% endschema %}

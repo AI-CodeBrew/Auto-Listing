@@ -42,8 +42,10 @@ CREATE TABLE IF NOT EXISTS plans (
   searches integer NOT NULL,
   description text NOT NULL DEFAULT '',
   position integer NOT NULL DEFAULT 0,
-  active integer NOT NULL DEFAULT 1
+  active integer NOT NULL DEFAULT 1,
+  max_stores integer NOT NULL DEFAULT 1       -- how many Shopify stores the plan allows
 );
+ALTER TABLE plans ADD COLUMN IF NOT EXISTS max_stores integer NOT NULL DEFAULT 1;
 
 -- A user asks for a plan; the admin approves or rejects it.
 CREATE TABLE IF NOT EXISTS billing_requests (
@@ -230,17 +232,30 @@ CREATE INDEX IF NOT EXISTS products_owner ON products(owner_id);
 CREATE INDEX IF NOT EXISTS billing_requests_user ON billing_requests(user_id, status);
 CREATE INDEX IF NOT EXISTS search_log_user ON search_log(user_id, created_at);
 
+-- The Shopify stores a signed-in user connected (the admin uses the plain settings keys).
+CREATE TABLE IF NOT EXISTS shopify_stores (
+  id text PRIMARY KEY,
+  owner_id text NOT NULL,
+  domain text NOT NULL,
+  method text NOT NULL DEFAULT 'client',
+  client_id text NOT NULL DEFAULT '',
+  client_secret text NOT NULL DEFAULT '',
+  admin_token text NOT NULL DEFAULT '',
+  created_at text NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS shopify_stores_owner_domain ON shopify_stores (owner_id, domain);
+
 -- ============================================================
 -- Default plans (only when there are no plans yet, the same as the app does)
 -- ============================================================
 
-INSERT INTO plans (id, name, price, searches, description, position, active)
-SELECT p.id, p.name, p.price, p.searches, p.description, p.position, 1
+INSERT INTO plans (id, name, price, searches, description, position, active, max_stores)
+SELECT p.id, p.name, p.price, p.searches, p.description, p.position, 1, p.max_stores
 FROM (VALUES
-  ('starter',  'Starter',  'Rs 1,000 / month',  25, 'For trying the app with a few products.',      0),
-  ('pro',      'Pro',      'Rs 2,500 / month',  75, 'For a store that lists products every week.',  1),
-  ('business', 'Business', 'Rs 6,000 / month', 200, 'For teams that list many products every day.', 2)
-) AS p(id, name, price, searches, description, position)
+  ('starter',  'Starter',  'Rs 1,000 / month',  25, 'For trying the app with a few products.',      0,  1),
+  ('pro',      'Pro',      'Rs 2,500 / month',  75, 'For a store that lists products every week.',  1,  3),
+  ('business', 'Business', 'Rs 6,000 / month', 200, 'For teams that list many products every day.', 2, 10)
+) AS p(id, name, price, searches, description, position, max_stores)
 WHERE NOT EXISTS (SELECT 1 FROM plans);
 
 -- ============================================================
@@ -259,6 +274,7 @@ ALTER TABLE sources          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE images           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE videos           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE settings         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE shopify_stores   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE counters         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE creative_cache   ENABLE ROW LEVEL SECURITY;
 
@@ -270,7 +286,7 @@ BEGIN
     REVOKE ALL ON TABLE
       users, plans, billing_requests, search_log,
       products, jobs, sources, images, videos,
-      settings, counters, creative_cache
+      settings, counters, creative_cache, shopify_stores
     FROM anon, authenticated;
   END IF;
 END $$;

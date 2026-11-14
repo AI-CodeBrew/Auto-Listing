@@ -69,7 +69,7 @@ function ResultRow({ product, onDone }: { product: Product; onDone: () => Promis
       </summary>
       {open && (
         <div className="listing-body">
-          {finished && <ReviewCard id={product.id} onDone={onDone} readOnly={product.stage !== "review"} />}
+          {finished && <ReviewCard id={product.id} onDone={onDone} readOnly={product.stage !== "review" && product.stage !== "history"} />}
           {product.stage === "blocked" && <BlockedEditor id={product.id} onDone={onDone} />}
           {product.stage === "failed" && <FailedEditor id={product.id} onDone={onDone} />}
           {product.stage === "researching" && <ResearchActivity productId={product.id} />}
@@ -201,7 +201,7 @@ function ReviewCard({ id, onDone, readOnly = false }: { id: string; onDone: () =
       ))}
 
       <div className="results-split">
-      <div className="stack">
+      <div className="review-left">
       <label className="field">
         <span>Category</span>
         <input type="text" value={category} readOnly={readOnly} onChange={(e) => setCategory(e.target.value)} data-testid="review-category" />
@@ -222,7 +222,7 @@ function ReviewCard({ id, onDone, readOnly = false }: { id: string; onDone: () =
         </div>
       )}
 
-      <label className="field">
+      <label className="field field-grow">
         <span>Product description</span>
         <textarea rows={14} value={description} readOnly={readOnly} onChange={(e) => setDescription(e.target.value)} data-testid="review-description" />
         <small className="muted">Lines starting with &quot;- &quot; become bullets.</small>
@@ -254,10 +254,6 @@ function ReviewCard({ id, onDone, readOnly = false }: { id: string; onDone: () =
           ))}
         </ul>
       </section>}
-
-      <p className="notice">
-        Web images and videos may be copyrighted. Use only what you have the right to use.
-      </p>
 
       {error && <p className="error" role="alert">{error}</p>}
       {!readOnly && <div className="row">

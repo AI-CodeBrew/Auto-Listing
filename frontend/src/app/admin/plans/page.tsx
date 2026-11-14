@@ -8,6 +8,7 @@ interface Plan {
   name: string;
   price: string;
   searches: number;
+  stores: number;
   description: string;
   active: boolean;
 }
@@ -18,12 +19,12 @@ export default function AdminPlansPage() {
     <div className="page stack">
       <header className="page-head">
         <h1>Plans</h1>
-        <p>The three plans users see on their Billing page. Change the name, price or number of searches.</p>
+        <p>The three plans users see on their Billing page. Change the name, price, number of searches or number of Shopify stores.</p>
       </header>
       {error && <p className="error">{error}</p>}
       <div className="plan-grid">
         {(data?.plans ?? []).map((plan) => (
-          <PlanEditor key={`${plan.id}:${plan.name}:${plan.price}:${plan.searches}:${plan.description}:${plan.active}`} plan={plan} onSaved={refresh} />
+          <PlanEditor key={`${plan.id}:${plan.name}:${plan.price}:${plan.searches}:${plan.stores}:${plan.description}:${plan.active}`} plan={plan} onSaved={refresh} />
         ))}
       </div>
     </div>
@@ -31,7 +32,7 @@ export default function AdminPlansPage() {
 }
 
 function PlanEditor({ plan, onSaved }: { plan: Plan; onSaved: () => Promise<void> }) {
-  const [form, setForm] = useState({ ...plan, searches: String(plan.searches) });
+  const [form, setForm] = useState({ ...plan, searches: String(plan.searches), stores: String(plan.stores) });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +42,7 @@ function PlanEditor({ plan, onSaved }: { plan: Plan; onSaved: () => Promise<void
     setError(null);
     setMessage(null);
     try {
-      await api(`/api/admin/plans/${plan.id}`, { method: "PUT", json: { ...form, searches: Number(form.searches) } });
+      await api(`/api/admin/plans/${plan.id}`, { method: "PUT", json: { ...form, searches: Number(form.searches), stores: Number(form.stores) } });
       setMessage("Saved.");
       await onSaved();
     } catch (e) {
@@ -64,6 +65,10 @@ function PlanEditor({ plan, onSaved }: { plan: Plan; onSaved: () => Promise<void
       <label className="field">
         <span>Searches</span>
         <input type="number" min={1} value={form.searches} onChange={(e) => setForm({ ...form, searches: e.target.value })} />
+      </label>
+      <label className="field">
+        <span>Stores</span>
+        <input type="number" min={1} value={form.stores} onChange={(e) => setForm({ ...form, stores: e.target.value })} data-testid={`plan-stores-${plan.id}`} />
       </label>
       <label className="field">
         <span>Description</span>

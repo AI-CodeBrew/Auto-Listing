@@ -138,6 +138,77 @@ test.describe("account screens", () => {
     }
   });
 
+  test("a plan allows only so many Shopify stores, and the active store is chosen at the top", async ({ browser, request }) => {
+    const context = await browser.newContext({ baseURL: APP_URL, storageState: { cookies: [], origins: [] } });
+    const page = await context.newPage();
+    try {
+      const email = uniqueEmail("stores");
+      const signup = await context.request.post("/api/auth/signup", { data: { name: "Store Owner", email, password: "password123" } });
+      expect(signup.status(), await signup.text()).toBe(201);
+
+      // Billing shows the limit of every plan.
+      await page.goto("/billing");
+      await expect(page.getByTestId("plan-stores-starter")).toContainText("1 Shopify store");
+      await expect(page.getByTestId("plan-stores-pro")).toContainText("3 Shopify stores");
+      await expect(page.getByTestId("plan-stores-business")).toContainText("10 Shopify stores");
+
+      // Free account: one store, and then the page says why there is no more room.
+      await page.goto("/shopify");
+      await page.getByRole("button", { name: "Shopify", exact: true }).click();
+      await page.getByTestId("shopify-domain").fill("first-shop");
+      await page.getByTestId("shopify-client-id").fill("mock-client");
+      await page.getByTestId("shopify-client-secret").fill("mock-secret");
+      await page.getByTestId("shopify-save").click();
+      await expect(page.getByTestId("store-row")).toHaveCount(1);
+      await expect(page.getByTestId("store-count")).toContainText("1 of 1 store");
+      await expect(page.getByTestId("store-limit")).toContainText("allows 1 store");
+      await expect(page.getByTestId("store-add")).toHaveCount(0);
+      await expect(page.getByTestId("store-switcher")).toHaveCount(0);
+      // The API refuses a second one too.
+      const refused = await context.request.post("/api/stores", { data: { method: "client", domain: "second-shop", clientId: "id", clientSecret: "secret" } });
+      expect(refused.status()).toBe(403);
+
+      // The admin approves the Pro plan: three stores.
+      const asked = await context.request.post("/api/billing/request", { data: { planId: "pro", paymentNote: "JazzCash 9001" } });
+      expect(asked.status(), await asked.text()).toBe(201);
+      const pending = await (await request.get("/api/admin/billing?status=pending")).json();
+      const mine = pending.requests.find((item: { userEmail: string }) => item.userEmail === email);
+      const approved = await request.post(`/api/admin/billing/${mine.id}`, { data: { approve: true, searches: 75, note: "Paid" } });
+      expect(approved.status(), await approved.text()).toBe(200);
+
+      await page.reload();
+      await page.getByRole("button", { name: "Shopify", exact: true }).click();
+      await expect(page.getByTestId("store-count")).toContainText("1 of 3 stores");
+      await page.getByTestId("store-add").click();
+      await expect(page.getByTestId("shopify-domain")).toHaveValue("");
+      await page.getByTestId("shopify-domain").fill("second-shop");
+      await page.getByTestId("shopify-client-id").fill("second-client");
+      await page.getByTestId("shopify-client-secret").fill("second-secret");
+      await page.getByTestId("shopify-save").click();
+      await expect(page.getByTestId("store-row")).toHaveCount(2);
+      await expect(page.getByTestId("store-row").filter({ hasText: "second-shop.myshopify.com" })).toContainText("Active");
+      await expect(page.getByTestId("shopify-domain")).toHaveValue("second-shop.myshopify.com");
+
+      // With two stores the top bar lets you choose, and the choice follows to every page.
+      await expect(page.getByTestId("store-switcher")).toHaveValue(/.+/);
+      const options = await page.getByTestId("store-switcher").locator("option").allTextContents();
+      expect(options).toEqual(["first-shop.myshopify.com", "second-shop.myshopify.com"]);
+      await page.getByTestId("store-switcher").selectOption({ label: "first-shop.myshopify.com" });
+      await expect(page.getByTestId("store-switcher").locator("option:checked")).toHaveText("first-shop.myshopify.com");
+      expect((await (await context.request.get("/api/settings/shopify")).json()).domain).toBe("first-shop.myshopify.com");
+      await page.getByRole("button", { name: "Shopify", exact: true }).click();
+      await expect(page.getByTestId("shopify-domain")).toHaveValue("first-shop.myshopify.com");
+
+      // Removing a store makes room again.
+      page.once("dialog", (dialog) => void dialog.accept());
+      await page.getByTestId("store-row").filter({ hasText: "second-shop.myshopify.com" }).getByTestId("store-remove").click();
+      await expect(page.getByTestId("store-row")).toHaveCount(1);
+      await expect(page.getByTestId("store-add")).toBeVisible();
+    } finally {
+      await context.close();
+    }
+  });
+
   test("the admin portal shows users, requests, plans and SerpAPI", async ({ page }) => {
     await page.goto("/admin");
     await expect(page.getByRole("heading", { name: "Admin overview" })).toBeVisible();
@@ -147,6 +218,10 @@ test.describe("account screens", () => {
     await expect(page.getByRole("heading", { name: "Users", exact: true, level: 1 })).toBeVisible();
     await nav.getByRole("link", { name: "Plans", exact: true }).click();
     await expect(page.getByTestId("plan-editor-pro")).toBeVisible();
+    // Every plan says how many Shopify stores it allows.
+    await expect(page.getByTestId("plan-stores-starter")).toHaveValue("1");
+    await expect(page.getByTestId("plan-stores-pro")).toHaveValue("3");
+    await expect(page.getByTestId("plan-stores-business")).toHaveValue("10");
     await nav.getByRole("link", { name: /Billing requests/ }).click();
     await expect(page.getByRole("heading", { name: "Billing requests" })).toBeVisible();
   });

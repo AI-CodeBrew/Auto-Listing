@@ -8,6 +8,7 @@ interface Plan {
   name: string;
   price: string;
   searches: number;
+  stores: number;
   description: string;
 }
 
@@ -91,6 +92,9 @@ export default function BillingPage() {
               <p className="plan-price">{plan.price}</p>
               <p className="plan-searches">
                 <strong>{plan.searches}</strong> searches
+              </p>
+              <p className="plan-searches" data-testid={`plan-stores-${plan.id}`}>
+                <strong>{plan.stores}</strong> Shopify {plan.stores === 1 ? "store" : "stores"}
               </p>
               <p className="muted">{plan.description}</p>
               <button type="button" className={selected ? "btn btn-primary" : "btn"} disabled={Boolean(pending) || busy} onClick={() => setChosen(plan.id)} aria-pressed={selected}>

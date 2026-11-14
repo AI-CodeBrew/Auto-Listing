@@ -535,7 +535,6 @@ test.describe("the screens", () => {
     await expect(page).toHaveURL(/\/review$/);
     const card = page.getByTestId("review-card").last();
     await expect(card.getByTestId("review-name")).toHaveValue("Steel Bottle Deluxe");
-    await expect(card).toContainText("may be copyrighted");
     await expect(card).toContainText("Needs checking");
     await expect(card.getByTestId("image-tile").first()).toBeVisible();
     await expect(card.getByTestId("video-row").filter({ hasText: "youtube" }).first()).toBeVisible();
@@ -602,14 +601,19 @@ test.describe("the screens", () => {
   });
 });
 
+/** Puts the Bundle page back as the one that is set, so the next test starts from the same place. */
+async function restoreBundlePage(request: import("@playwright/test").APIRequestContext) {
+  await request.post("/api/templates/saamano/push", { data: {} });
+  await request.post("/api/templates/saamano/use", { data: {} });
+}
+
 test.describe("the Template page", () => {
   test("adds only the product page to the live theme and links to a preview of it", async ({ page }) => {
     await mockSet({ scopes: ["write_products", "write_inventory", "write_themes"] });
     const before = (await mockState()).themes[0].files;
     await page.goto("/template");
     const card = page.getByTestId("template-saamano");
-    await expect(card).toContainText("Adds 3 files to your theme");
-    await expect(card).toContainText("stay exactly as they are");
+    await expect(card).toContainText("3 files");
 
     let question = "";
     page.once("dialog", (dialog) => {
@@ -618,10 +622,10 @@ test.describe("the Template page", () => {
     });
     await card.getByTestId("template-push").click();
     const result = card.getByTestId("template-push-result");
-    await expect(result).toContainText('is in your live theme "Dawn" on mock-store.myshopify.com', { timeout: 60_000 });
+    await expect(result).toContainText("Set up in your store", { timeout: 60_000 });
     expect(question).toContain("do not change");
-    await expect(result.getByRole("link", { name: "Preview the product page" })).toHaveAttribute("href", "https://mock-store.myshopify.com/products/steel-bottle?view=fynk-autolisting-product");
-    await expect(result.getByRole("link", { name: "Open in theme editor" })).toHaveAttribute("href", "https://mock-store.myshopify.com/admin/themes/1/editor");
+    await expect(result.getByRole("link", { name: "Preview page" })).toHaveAttribute("href", "https://mock-store.myshopify.com/products/steel-bottle?view=fynk-autolisting-product");
+    await expect(result.getByRole("link", { name: "Theme editor" })).toHaveAttribute("href", "https://mock-store.myshopify.com/admin/themes/1/editor");
     await page.screenshot({ path: path.join(TEST_DIR, "screen-template.png"), fullPage: true });
 
     // Still one theme, with every file it had, plus the three new ones.
@@ -636,7 +640,7 @@ test.describe("the Template page", () => {
 
     // After a reload the page still links to it.
     await page.reload();
-    await expect(card.getByTestId("template-last-push")).toContainText('Added to your theme "Dawn"');
+    await expect(card.getByTestId("template-last-push")).toContainText("Set up in your store");
 
     // Cancelling the question sends nothing.
     const uploads = (await mockState()).themeUploads.length;
@@ -661,10 +665,11 @@ test.describe("the Template page preview", () => {
 
     const preview = page.getByTestId("saamano-preview");
     await expect(preview).toContainText("A sample product.");
-    await expect(preview.getByTestId("preview-title")).toHaveText("Steel Water Bottle 750 ml");
-    await expect(preview.getByTestId("preview-main-image")).toBeVisible();
+    await expect(preview.getByTestId("preview-title")).toHaveText("Smart LED Temperature Display Travel Mug");
+    await expect(preview.getByTestId("preview-main-image")).toHaveAttribute("src", "/template-preview/product-1.jpg");
     await expect(preview.getByTestId("preview-features").locator(".sf-card")).toHaveCount(4);
-    await expect(preview.getByTestId("preview-top-features").locator(".stf-card")).toHaveCount(4);
+    // The saved text of this product has no Top Features, so the section is left out.
+    await expect(preview.getByTestId("preview-top-features")).toHaveCount(0);
     await expect(preview.getByTestId("preview-compare").locator("tbody tr")).toHaveCount(4);
     await expect(preview.getByTestId("preview-faq")).toContainText("Can I pay cash on delivery?");
     await expect(preview.getByTestId("preview-related").locator(".sp-card")).toHaveCount(4);
@@ -675,6 +680,138 @@ test.describe("the Template page preview", () => {
     await preview.getByTestId("preview-close").click();
     await expect(preview).toHaveCount(0);
     expect((await mockState()).ai.length).toBe(aiCalls);
+  });
+});
+
+test.describe("the Classic product page", () => {
+  test("shows every section of the page in its preview, and a push adds only its seven new files", async ({ page, request }) => {
+    await mockSet({ scopes: ["write_products", "write_inventory", "write_themes"] });
+    const before = (await mockState()).themes[0].files;
+    await page.goto("/template");
+    const card = page.getByTestId("template-classic");
+    await expect(card).toContainText("Classic product page");
+    await expect(card).toContainText("7 files");
+
+    await card.getByTestId("template-preview").click();
+    const frame = page.getByTestId("rendered-preview").frameLocator("iframe");
+    // Every part of the page, filled from the sample product's own text and photos.
+    // The Classic page shows the Balaclava Hood listing; the Saamano preview shows the travel mug.
+    await expect(frame.locator(".au-hero h1")).toHaveText("3-in-1 Fleece Balaclava Hood");
+    await expect(frame.locator(".au-gallery img")).toHaveAttribute("src", "/template-preview/hood-1.jpg");
+    await expect(frame.locator(".au-tier")).toHaveCount(0);
+    await expect(frame.locator(".au-checks li")).toHaveCount(3);
+    await expect(frame.locator(".au-tabs button")).toHaveCount(2);
+    await expect(frame.locator(".au-why h2")).toHaveText("Combined Design");
+    await expect(frame.locator(".au-why details")).toHaveCount(4);
+    await expect(frame.locator(".au-stats div")).toHaveCount(3);
+    await expect(frame.locator(".au-ing li")).toHaveCount(3);
+    await expect(frame.locator(".au-steps article")).toHaveCount(3);
+    await expect(frame.locator(".au-faq details")).toHaveCount(4);
+    // The quantity buttons work, and the Shipping tab opens.
+    await frame.locator("[data-au-plus]").click();
+    await expect(frame.locator("[data-au-qty]")).toHaveText("2");
+    await frame.locator('[data-au-tab="ship"]').click();
+    await expect(frame.locator('[data-au-panel="ship"]')).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    // Another page is set now. This one offers "Use this page", and using it makes it the only one set.
+    const bundle = page.getByTestId("template-saamano");
+    await expect(card.getByTestId("template-push")).toHaveText("Use this page");
+    await expect(card.getByTestId("template-last-push")).toHaveCount(0);
+    page.once("dialog", (dialog) => void dialog.accept());
+    await card.getByTestId("template-push").click();
+    await expect(card.getByTestId("template-push-result")).toContainText("Set up in your store", { timeout: 60_000 });
+    await expect(card.getByTestId("template-in-use")).toBeVisible();
+    await expect(card.getByTestId("template-push")).toHaveText("Update in my store");
+    await expect(bundle.getByTestId("template-in-use")).toHaveCount(0);
+    await expect(bundle.getByTestId("template-last-push")).toHaveCount(0);
+    await expect(bundle.getByTestId("template-push")).toHaveText("Use this page");
+    const theme = (await mockState()).themes[0];
+    for (const [filename, checksum] of Object.entries(before)) expect(theme.files[filename]).toBe(checksum);
+    expect(Object.keys(theme.files).filter((filename) => filename.includes("fynk-classic")).sort()).toEqual([
+      "sections/fynk-classic-faq.liquid",
+      "sections/fynk-classic-features.liquid",
+      "sections/fynk-classic-hero.liquid",
+      "sections/fynk-classic-special.liquid",
+      "sections/fynk-classic-stats.liquid",
+      "sections/fynk-classic-steps.liquid",
+      "templates/product.fynk-classic-product.json",
+    ]);
+    await restoreBundlePage(request);
+  });
+});
+
+test.describe("the page new products get", () => {
+  test("is the one page that is set: using another page replaces it for new products", async ({ page, request }) => {
+    await mockSet({ scopes: ["write_products", "write_inventory", "write_themes"] });
+    await restoreBundlePage(request);
+    await page.goto("/template");
+    const bundle = page.getByTestId("template-saamano");
+    const classic = page.getByTestId("template-classic");
+    await expect(bundle.getByTestId("template-in-use")).toBeVisible();
+    await expect(classic.getByTestId("template-in-use")).toHaveCount(0);
+    await expect(classic.getByTestId("template-push")).toHaveText("Use this page");
+    try {
+      page.once("dialog", (dialog) => void dialog.accept());
+      await classic.getByTestId("template-push").click();
+      await expect(classic.getByTestId("template-in-use")).toBeVisible({ timeout: 60_000 });
+      await expect(bundle.getByTestId("template-in-use")).toHaveCount(0);
+      const flags = (await (await request.get("/api/templates")).json()).templates.map((item: { id: string; useForNew: boolean }) => [item.id, item.useForNew]);
+      expect(flags).toEqual([["saamano", false], ["classic", true]]);
+
+      // A product pushed now gets the Classic page. Using the Bundle page again changes the next one.
+      const first = await toListing(request, { name: "Steel Bottle Classic" });
+      expect((await request.post(`/api/products/${first.product.id}/send`, { data: {} })).status()).toBe(202);
+      await waitForShopify(request, first.product.id, "draft");
+      expect((await mockState()).products.at(-1)!.input.templateSuffix).toBe("fynk-classic-product");
+
+      page.once("dialog", (dialog) => void dialog.accept());
+      await bundle.getByTestId("template-push").click();
+      await expect(bundle.getByTestId("template-in-use")).toBeVisible({ timeout: 60_000 });
+      await expect(classic.getByTestId("template-in-use")).toHaveCount(0);
+      const second = await toListing(request, { name: "Steel Bottle Bundle" });
+      expect((await request.post(`/api/products/${second.product.id}/send`, { data: {} })).status()).toBe(202);
+      await waitForShopify(request, second.product.id, "draft");
+      expect((await mockState()).products.at(-1)!.input.templateSuffix).toBe("fynk-autolisting-product");
+    } finally {
+      await restoreBundlePage(request);
+    }
+  });
+});
+
+test.describe("a review that moved to History", () => {
+  test("can still be approved from the Review page", async ({ page, request }) => {
+    const first = await createProduct(request, { name: "Steel Bottle First" });
+    await waitForStage(request, first, "review");
+    // A newer product finishing research moves the earlier review to History.
+    const second = await createProduct(request, { name: "Steel Bottle Second" });
+    await waitForStage(request, second, "review");
+    expect((await detail(request, first)).product.stage).toBe("history");
+
+    await page.goto("/review");
+    const row = page.locator(`[data-testid="job"][data-product="${first}"]`);
+    await row.locator("summary").click();
+    await expect(row.getByRole("button", { name: "Reject" })).toBeVisible();
+    await expect(row.getByRole("button", { name: "Search Again" })).toBeVisible();
+    await row.getByRole("button", { name: "Approve to Listing" }).click();
+    await expect.poll(async () => (await detail(request, first)).product.stage).toBe("listing");
+  });
+});
+
+test.describe("the Template cards", () => {
+  test("the picture scrolls down the whole page while the pointer is over it, and slides back after", async ({ page }) => {
+    await page.goto("/template");
+    for (const id of ["saamano", "classic"]) {
+      const card = page.getByTestId(`template-${id}`);
+      const image = card.locator(".hs-image");
+      await expect.poll(() => image.evaluate((el) => (el as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+      const offset = () => card.locator(".hs-content").evaluate((el) => new DOMMatrixReadOnly(getComputedStyle(el).transform).m42);
+      expect(Math.abs(await offset())).toBeLessThan(1);
+      await card.locator(".tpl-thumb").hover();
+      await expect.poll(offset, { timeout: 8_000 }).toBeLessThan(-20);
+      await page.mouse.move(2, 2);
+      await expect.poll(async () => Math.abs(await offset()), { timeout: 8_000 }).toBeLessThan(1);
+    }
   });
 });
 

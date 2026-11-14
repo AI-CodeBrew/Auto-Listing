@@ -10,19 +10,22 @@ import re
 THEME_TEMPLATES = [
     {
         "id": "saamano",
-        "name": "Saamano product page",
+        "name": "Bundle product page",
         "folder": "fynk-autolisting-product",
         "templateSuffix": "fynk-autolisting-product",
-        "description": "Adds the Saamano product page to your store's current theme. Your home page, header, footer, contact page and other products stay exactly as they are. Only the products you push from this app use this page.",
-        "productPage": [
-            "Large photo with the other photos beside it, title, price, description with check marks",
-            "Buy 1/2/3/4 bundle cards, quantity and Add to cart, delivery lines and trust badges",
-            "Feature cards with round photos (text written by your AI for each product)",
-            "About this product, and Why you'll love it with photos",
-            "Why Choose Us? comparison table and the Good to know FAQ (written by your AI)",
-            "Bundle banner with the product's photos, and recommended products",
-        ],
-    }
+        "tagline": "Bundle cards and AI-written features",
+        "preview": "/template-preview/saamano.jpg",
+        "afterPush": "New products you push now use this page. Products already in your store keep theirs.",
+    },
+    {
+        "id": "classic",
+        "name": "Classic product page",
+        "folder": "fynk-classic-product",
+        "templateSuffix": "fynk-classic-product",
+        "tagline": "Serif headlines on a calm cream layout",
+        "preview": "/template-preview/classic.jpg",
+        "afterPush": "New products you push now use this page. Products already in your store keep theirs.",
+    },
 ]
 
 THEME_FOLDERS = ["assets", "blocks", "config", "layout", "locales", "sections", "snippets", "templates"]

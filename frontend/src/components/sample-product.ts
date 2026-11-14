@@ -1,55 +1,50 @@
 import type { PreviewProduct, Story } from "./SaamanoPreview";
 
 /**
- * The made-up product the Template page previews, so a design can be seen before it is pushed.
- * Fixed text: opening the preview asks the AI for nothing. The photos are drawings in public/template-preview.
+ * The one product every Template preview shows, so a design can be seen before it is pushed: a real
+ * listing ("Smart LED Temperature Display Travel Mug") with its own photos and the AI text saved for it.
+ * Fixed text and photos: opening a preview asks the AI for nothing. The photos are in public/template-preview.
  */
-const photo = (n: number) => `/template-preview/bottle-${n}.svg`;
+const photo = (n: number) => `/template-preview/product-${n}.jpg`;
 
 export const SAMPLE_PRODUCT: PreviewProduct = {
-  name: "Steel Water Bottle 750 ml",
-  price: "2499",
+  name: "Smart LED Temperature Display Travel Mug",
+  price: "2000",
   description: [
-    "A double-wall steel bottle that keeps water cold through a long day at work, school or the gym.",
+    "Stay informed about your beverage temperature with this sleek travel mug featuring a smart LED display. Its vacuum insulation technology keeps drinks hot or cold for extended periods, making it perfect for on-the-go use. The button for opening ensures easy access while minimizing spills during your travels.",
     "",
-    "- Double-wall steel: Keeps drinks cold for hours",
-    "- Leak-proof cap: Stays dry in your bag",
-    "- Carry loop: Easy to hold on the go",
-    "- Wide mouth: Fits ice cubes and is easy to clean",
+    "- 420ml capacity for your favorite beverages",
+    "- LED display shows the current drink temperature",
+    "- Vacuum insulation maintains temperature effectively",
+    "- Stylish black design for a modern look",
+    "- Convenient button for easy opening and sipping",
   ].join("\n"),
   images: [1, 2, 3, 4, 5, 6].map(photo),
 };
 
 export const SAMPLE_STORY: Story = {
-  featureHeading: "Tough & Practical",
-  featureSubheading: "A steel bottle made for every day, wherever you go.",
+  featureHeading: "Smart Sipping On The Go",
+  featureSubheading: "Check your drink's temperature on the LED display and open the mug with a convenient button.",
   featureCards: [
-    { title: "Stays Cold", text: "Double-wall steel keeps your water cold for hours." },
-    { title: "No Leaks", text: "The sealed cap keeps your bag dry." },
-    { title: "Built Tough", text: "A strong steel body made for daily use." },
-    { title: "Easy Carry", text: "The loop on the cap makes it easy to hold." },
+    { title: "LED Display", text: "Shows the current temperature of your drink." },
+    { title: "420ml Capacity", text: "Holds 420ml of your favorite beverage." },
+    { title: "Easy Opening", text: "A convenient button provides access for opening and sipping." },
+    { title: "Black Design", text: "The stylish black finish gives the mug a modern look." },
   ],
-  topFeaturesSubheading: "Made to keep every drink just right.",
-  topFeatures: [
-    { title: "Sealed Cap", text: "Leak-proof in any bag." },
-    { title: "Wide Mouth", text: "Fits ice cubes, easy to clean." },
-    { title: "Cold for Hours", text: "Double walls hold the chill." },
-    { title: "Carry Loop", text: "Take it anywhere with one finger." },
-  ],
-  compareIntro: "A tough steel bottle that keeps water cold and your bag dry, made to last for years of daily use.",
-  compareRows: ["Keeps water cold for hours", "Leak-proof sealed cap", "Strong double-wall steel", "Easy to carry and clean"],
+  compareIntro: "Choose this travel mug for its 420ml capacity, LED temperature display and convenient button opening. Its black design gives it a modern look.",
+  compareRows: ["Shows your drink temperature", "Holds 420ml of your beverage", "Opens with a convenient button", "Features a stylish black design"],
   faq: [
-    { question: "Can I pay cash on delivery?", answer: "Yes. You pay when the order reaches your door." },
-    { question: "Does the cap leak?", answer: "No. The sealed cap is made to stop leaks, so it is safe in a bag." },
-    { question: "How much is delivery?", answer: "Rs 250 anywhere in Pakistan." },
-    { question: "Do I get a discount on 2 or more?", answer: "Yes. 2 items get 20% off, 3 get 25% and 4 or more get 30%." },
+    { question: "What capacity is the travel mug?", answer: "It has a 420ml capacity." },
+    { question: "What does the LED display show?", answer: "It shows the current temperature of your drink." },
+    { question: "How does the mug open?", answer: "It has a convenient button for opening and sipping." },
+    { question: "Can I pay cash on delivery?", answer: "Yes, cash on delivery is available. Delivery costs Rs 250 anywhere in Pakistan." },
   ],
 };
 
-/** "You may also like" in the sample: the same drawings as other products. */
+/** "You may also like" in the sample: the same mug in the other colours it comes in. */
 export const SAMPLE_RELATED: PreviewProduct[] = [
-  { name: "Steel Water Bottle, Clay", price: "2499", description: "", images: [photo(2)] },
-  { name: "Steel Water Bottle, Navy", price: "2499", description: "", images: [photo(3)] },
-  { name: "Steel Water Bottle, Sun", price: "2499", description: "", images: [photo(6)] },
-  { name: "Bottle Set of 3", price: "6999", description: "", images: [photo(5)] },
+  { name: "Smart LED Travel Mug, Green", price: "2000", description: "", images: [photo(7)] },
+  { name: "Smart LED Travel Mug, Red", price: "2000", description: "", images: [photo(8)] },
+  { name: "Smart LED Travel Mug, Yellow", price: "2000", description: "", images: [photo(9)] },
+  { name: "Smart LED Travel Mug, Blue", price: "2000", description: "", images: [photo(10)] },
 ];

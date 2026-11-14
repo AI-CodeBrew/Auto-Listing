@@ -733,8 +733,9 @@ def create_app() -> FastAPI:
         product = owned_product(user, product_id)
         if not product:
             return fail("Product not found", 404)
-        if product["stage"] != "review":
-            return fail("Only products in the Review tab can be approved.", 409)
+        # A review that moved to History because a newer product finished can still be approved.
+        if product["stage"] not in ("review", "history"):
+            return fail("Only products in the Review tab or in History can be approved.", 409)
         body = await json_body(request, None)
         if not isinstance(body, dict):
             return fail("Invalid request")
@@ -783,8 +784,8 @@ def create_app() -> FastAPI:
         product = owned_product(user, product_id)
         if not product:
             return fail("Product not found", 404)
-        if product["stage"] != "review":
-            return fail("Only products in the Review tab can be rejected.", 409)
+        if product["stage"] not in ("review", "history"):
+            return fail("Only products in the Review tab or in History can be rejected.", 409)
         repo.update_product(product_id, {"stage": "rejected"})
         return ok({"product": repo.get_product(product_id)})
 
@@ -805,7 +806,7 @@ def create_app() -> FastAPI:
             product = owned_product(user, product_id)
             if not product:
                 return fail("Product not found", 404)
-            if product["stage"] not in ("review", "rejected", "failed", "blocked"):
+            if product["stage"] not in ("review", "history", "rejected", "failed", "blocked"):
                 return fail("This product cannot be researched again from its current stage.", 409)
             if repo.has_active_job(product_id):
                 return fail("Research is already running for this product.", 409)
@@ -936,6 +937,166 @@ def create_app() -> FastAPI:
 
     # ===== Shopify settings =====
 
+    def store_form(body: dict, *, have_secret: bool, have_token: bool):
+        """The details of one store from the form. Returns (fields, None) or (None, the problem to show)."""
+        method = "token" if body.get("method") == "token" else "client"
+        domain = settings.normalize_domain(str(body.get("domain") or ""))
+        client_id = str(body.get("clientId") or "").strip()
+        client_secret = str(body.get("clientSecret") or "").strip()
+        admin_token = str(body.get("adminToken") or "").strip()
+        if not domain:
+            return None, "Enter your store domain, for example my-store.myshopify.com."
+        if not settings.is_valid_domain(domain):
+            return None, f'"{domain}" does not look like a store domain. Use the form my-store.myshopify.com.'
+        if method == "token":
+            problem = _admin_token_problem(admin_token)
+            if problem:
+                return None, problem
+            if not admin_token and not have_token:
+                return None, "Enter the Admin API access token from your Shopify app. It starts with shpat_."
+        else:
+            if not client_id:
+                return None, "Enter the Client ID from your Shopify app."
+            if not client_secret and not have_secret:
+                return None, "Enter the Client secret from your Shopify app."
+        return (method, domain, client_id, client_secret, admin_token), None
+
+    def stores_payload(user: dict) -> dict:
+        """The stores of this account, which one is active, and how many the plan allows."""
+        if user["role"] == "admin":
+            summary = settings.shopify_summary()
+            rows = [{"id": "admin", "domain": summary["domain"], "method": summary["method"], "clientId": summary["clientId"], "hasSecret": summary["hasSecret"], "hasAdminToken": summary["hasAdminToken"], "active": True, "createdAt": ""}] if summary["domain"] else []
+            return {"stores": rows, "limit": None, "used": len(rows), "canAdd": False, "planName": None, "admin": True}
+        owner = user["id"]
+        rows = settings.list_stores(owner)
+        active = settings.active_store(owner)
+        allowance = accounts.store_allowance(owner)
+        return {
+            "stores": [settings.public_store(row, active["id"] if active else None) for row in rows],
+            "limit": allowance["limit"],
+            "used": len(rows),
+            "canAdd": len(rows) < allowance["limit"],
+            "planName": allowance["planName"],
+            "admin": False,
+        }
+
+    @app.get("/api/stores")
+    def stores_list(request: Request):
+        user, denied = need_user(request)
+        if denied:
+            return denied
+        return ok(stores_payload(user))
+
+    @app.post("/api/stores")
+    async def stores_add(request: Request):
+        refused = reject_foreign_request(request)
+        if refused:
+            return refused
+        user, denied = need_user(request)
+        if denied:
+            return denied
+        if user["role"] == "admin":
+            return fail("The admin connects the one store on the Integrations page.", 403)
+        body = await json_body(request, None) or {}
+        form, problem = store_form(body, have_secret=False, have_token=False)
+        if problem:
+            return fail(problem)
+        method, domain, client_id, client_secret, admin_token = form
+        owner = user["id"]
+        allowance = accounts.store_allowance(owner)
+        if len(settings.list_stores(owner)) >= allowance["limit"]:
+            plan = f"Your {allowance['planName']} plan" if allowance["planName"] else "Your free account"
+            return fail(f"{plan} allows {allowance['limit']} store{'s' if allowance['limit'] != 1 else ''}. Choose a bigger plan on the Billing page to connect more.", 403)
+        try:
+            row = settings.add_store(owner, method=method, domain=domain, client_id=client_id, client_secret=client_secret, admin_token=admin_token)
+            settings.activate_store(owner, row["id"])
+        except settings.StoreError as error:
+            return fail(error.message, error.status)
+        return ok(stores_payload(user), 201)
+
+    @app.put("/api/stores/{store_id}")
+    async def stores_update(request: Request, store_id: str):
+        refused = reject_foreign_request(request)
+        if refused:
+            return refused
+        user, denied = need_user(request)
+        if denied:
+            return denied
+        if user["role"] == "admin":
+            return fail("The admin changes the one store on the Integrations page.", 403)
+        owner = user["id"]
+        row = settings.get_store(owner, store_id)
+        if not row:
+            return fail("Store not found.", 404)
+        body = await json_body(request, None) or {}
+        form, problem = store_form(body, have_secret=bool(row["client_secret"]), have_token=bool(row["admin_token"]))
+        if problem:
+            return fail(problem)
+        method, domain, client_id, client_secret, admin_token = form
+        from .shopify.client import clear_token_cache
+
+        try:
+            settings.update_store(owner, store_id, method=method, domain=domain, client_id=client_id, client_secret=client_secret, admin_token=admin_token)
+        except settings.StoreError as error:
+            return fail(error.message, error.status)
+        clear_token_cache()
+        return ok(stores_payload(user))
+
+    @app.delete("/api/stores/{store_id}")
+    async def stores_remove(request: Request, store_id: str):
+        refused = reject_foreign_request(request)
+        if refused:
+            return refused
+        user, denied = need_user(request)
+        if denied:
+            return denied
+        if user["role"] == "admin":
+            return fail("The admin removes the store on the Integrations page.", 403)
+        from .shopify.client import clear_token_cache
+
+        try:
+            settings.remove_store(user["id"], store_id)
+        except settings.StoreError as error:
+            return fail(error.message, error.status)
+        clear_token_cache()
+        return ok(stores_payload(user))
+
+    @app.post("/api/stores/{store_id}/activate")
+    async def stores_activate(request: Request, store_id: str):
+        refused = reject_foreign_request(request)
+        if refused:
+            return refused
+        user, denied = need_user(request)
+        if denied:
+            return denied
+        if user["role"] == "admin":
+            return fail("The admin has one store.", 403)
+        try:
+            settings.activate_store(user["id"], store_id)
+        except settings.StoreError as error:
+            return fail(error.message, error.status)
+        return ok(stores_payload(user))
+
+    @app.post("/api/stores/{store_id}/test")
+    async def stores_test(request: Request, store_id: str):
+        refused = reject_foreign_request(request)
+        if refused:
+            return refused
+        user, denied = need_user(request)
+        if denied:
+            return denied
+        if user["role"] == "admin" or not settings.get_store(user["id"], store_id):
+            return fail("Store not found.", 404)
+        from .shopify.client import ShopifyError, test_shopify_connection
+
+        settings.current_store.set(store_id)
+        try:
+            return ok(await run_in_threadpool(test_shopify_connection))
+        except ShopifyError as error:
+            return fail(str(error), 422)
+        except Exception as error:  # noqa: BLE001
+            return fail(str(error), 500)
+
     @app.get("/api/settings/shopify")
     def shopify_get(request: Request):
         _, denied = need_user(request)
@@ -954,27 +1115,11 @@ def create_app() -> FastAPI:
         from .shopify.client import clear_token_cache
 
         body = await json_body(request, None) or {}
-        method = "token" if body.get("method") == "token" else "client"
-        domain = settings.normalize_domain(str(body.get("domain") or ""))
-        client_id = str(body.get("clientId") or "").strip()
-        client_secret = str(body.get("clientSecret") or "").strip()
-        admin_token = str(body.get("adminToken") or "").strip()
-        if not domain:
-            return fail("Enter your store domain, for example my-store.myshopify.com.")
-        if not settings.is_valid_domain(domain):
-            return fail(f'"{domain}" does not look like a store domain. Use the form my-store.myshopify.com.')
         creds = settings.shopify_credentials()
-        if method == "token":
-            problem = _admin_token_problem(admin_token)
-            if problem:
-                return fail(problem)
-            if not admin_token and not creds["adminToken"]:
-                return fail("Enter the Admin API access token from your Shopify app. It starts with shpat_.")
-        else:
-            if not client_id:
-                return fail("Enter the Client ID from your Shopify app.")
-            if not client_secret and not creds["clientSecret"]:
-                return fail("Enter the Client secret from your Shopify app.")
+        form, problem = store_form(body, have_secret=bool(creds["clientSecret"]), have_token=bool(creds["adminToken"]))
+        if problem:
+            return fail(problem)
+        method, domain, client_id, client_secret, admin_token = form
         settings.save_shopify_credentials(method=method, domain=domain, client_id=client_id, client_secret=client_secret, admin_token=admin_token)
         clear_token_cache()
         return ok(settings.shopify_summary())
@@ -1022,11 +1167,32 @@ def create_app() -> FastAPI:
         from .templates import THEME_TEMPLATES, template_size
 
         domain = settings.shopify_credentials()["domain"]
+        chosen = settings.default_template_id()
         items = []
         for template in THEME_TEMPLATES:
             last = settings.last_template_push(template["id"])
-            items.append({**template, **template_size(template["id"]), "lastPush": last if last and last.get("domain") == domain else None})
+            last = last if last and last.get("domain") == domain else None
+            items.append({**template, **template_size(template["id"]), "lastPush": last, "useForNew": template["id"] == chosen})
         return ok({"store": {"domain": domain, "missing": missing_shopify_settings()}, "running": is_theme_push_running(), "templates": items})
+
+    @app.post("/api/templates/{template_id}/use")
+    async def template_use(request: Request, template_id: str):
+        """Products pushed from now on, to the active store, get this page. Products already there keep theirs."""
+        refused = reject_foreign_request(request)
+        if refused:
+            return refused
+        _, denied = need_user(request)
+        if denied:
+            return denied
+        from .templates import find_template
+
+        if not find_template(template_id):
+            return fail("Unknown template.", 404)
+        last = settings.last_template_push(template_id)
+        if not last or last.get("domain") != settings.shopify_credentials()["domain"]:
+            return fail("Add this page to your store first. Then you can choose it for new products.", 409)
+        settings.save_default_template(template_id)
+        return ok({"templateId": template_id})
 
     @app.post("/api/templates/{template_id}/push")
     async def template_push(request: Request, template_id: str):

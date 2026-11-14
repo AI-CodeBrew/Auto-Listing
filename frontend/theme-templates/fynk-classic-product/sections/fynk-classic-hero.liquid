@@ -1,0 +1,214 @@
+{%- comment -%}
+  FynkTech Classic product page, part 1: photos with thumbnails, title, price, short text, three check
+  marks, quantity, Add to cart and two delivery lines.
+  The check marks come from the product's own "saamano.highlights" metafield (the bullet points of its
+  description).
+{%- endcomment -%}
+{%- capture au_html -%}
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=DM+Sans:wght@400;500;600&display=swap">
+{%- liquid
+  assign p = product
+  assign current_variant = p.selected_or_first_available_variant
+  assign highlights = p.metafields.saamano.highlights.value
+  assign form_id = 'au-form-' | append: section.id
+  assign intro = p.description | split: '<ul' | first | split: '<ol' | first | replace: '</p>', ' ' | strip_html | strip | truncatewords: 34
+-%}
+<section class="au-hero" id="au-hero-{{ section.id }}" style="--au-button: {{ section.settings.button_color }};">
+  <div class="au-grid">
+    <div class="au-media">
+      <div class="au-gallery">
+        {%- if p.images.size > 0 -%}
+          <img id="au-main-{{ section.id }}" src="{{ p.featured_image | image_url: width: 1400 }}" alt="{{ p.title | escape }}" fetchpriority="high">
+        {%- endif -%}
+      </div>
+      {%- if p.images.size > 1 -%}
+        <div class="au-thumbs">
+          {%- for image in p.images limit: 5 -%}
+            <button type="button" class="au-thumb{% if forloop.first %} is-on{% endif %}" data-au-thumb data-src="{{ image | image_url: width: 1400 }}" aria-label="Show photo {{ forloop.index }}">
+              <img src="{{ image | image_url: width: 200 }}" alt="" loading="lazy">
+            </button>
+          {%- endfor -%}
+        </div>
+      {%- endif -%}
+    </div>
+
+    <div class="au-buy">
+      <h1>{{ p.title | escape }}</h1>
+      <div class="au-price">
+        <strong data-au-price>{{ current_variant.price | money }}</strong>
+        {%- if current_variant.compare_at_price > current_variant.price -%}
+          <s data-au-compare>{{ current_variant.compare_at_price | money }}</s>
+        {%- endif -%}
+      </div>
+      {%- if intro != blank -%}<p class="au-sub">{{ intro }}</p>{%- endif -%}
+
+      <ul class="au-checks">
+        {%- if highlights != blank -%}
+          {%- for entry in highlights limit: 3 -%}
+            <li>{{ entry | split: '|' | first | escape }}</li>
+          {%- endfor -%}
+        {%- else -%}
+          {%- if section.settings.check_1 != blank -%}<li>{{ section.settings.check_1 | escape }}</li>{%- endif -%}
+          {%- if section.settings.check_2 != blank -%}<li>{{ section.settings.check_2 | escape }}</li>{%- endif -%}
+          {%- if section.settings.check_3 != blank -%}<li>{{ section.settings.check_3 | escape }}</li>{%- endif -%}
+        {%- endif -%}
+      </ul>
+
+      {%- form 'product', p, id: form_id, class: 'au-form', novalidate: 'novalidate' -%}
+        {%- if p.has_only_default_variant -%}
+          <input type="hidden" name="id" value="{{ current_variant.id }}">
+        {%- else -%}
+          <label class="au-variant">
+            <span>Option</span>
+            <select name="id" data-au-variant>
+              {%- for v in p.variants -%}
+                <option value="{{ v.id }}" data-price="{{ v.price }}" data-compare="{{ v.compare_at_price }}" {% if v.id == current_variant.id %}selected{% endif %} {% unless v.available %}disabled{% endunless %}>
+                  {{ v.title | escape }}{% unless v.available %} (Sold out){% endunless %}
+                </option>
+              {%- endfor -%}
+            </select>
+          </label>
+        {%- endif -%}
+
+        <div class="au-qty">
+          <button type="button" data-au-minus aria-label="Decrease quantity">&minus;</button>
+          <input type="hidden" name="quantity" value="1" data-au-qty-input>
+          <b data-au-qty>1</b>
+          <button type="button" data-au-plus aria-label="Increase quantity">+</button>
+        </div>
+        <button class="au-atc" type="submit" name="add" {% unless current_variant.available %}disabled{% endunless %}>
+          {%- if current_variant.available -%}{{ section.settings.add_to_cart_text | escape }}{%- else -%}Sold out{%- endif -%}
+        </button>
+      {%- endform -%}
+
+      <ul class="au-notes">
+        {%- if section.settings.delivery_line != blank -%}<li>{{ section.settings.delivery_line | escape }}</li>{%- endif -%}
+        {%- if section.settings.shipping_line != blank -%}<li>{{ section.settings.shipping_line | escape }}</li>{%- endif -%}
+      </ul>
+    </div>
+  </div>
+</section>
+<style>
+  .au-hero { background: #fff; color: #222; font-family: "DM Sans", sans-serif; padding: 36px 0 12px; }
+  .au-grid { width: min(1180px, calc(100% - 48px)); margin: 0 auto; display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 56px; align-items: start; }
+  .au-grid > * { min-width: 0; }
+  .au-gallery { background: #f3f1ee; }
+  .au-gallery img { width: 100%; height: auto; max-height: 640px; object-fit: contain; display: block; }
+  .au-thumbs { display: flex; gap: 10px; margin-top: 12px; }
+  .au-thumb { flex: 0 0 72px; width: 72px; padding: 0; border: 1px solid transparent; background: #f3f1ee; cursor: pointer; line-height: 0; }
+  .au-thumb.is-on { border-color: #222; }
+  .au-thumb img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+  .au-hero h1 { font-family: "Cormorant Garamond", serif; font-weight: 500; font-size: 52px; line-height: 1.05; margin: 0 0 12px; }
+  .au-price { display: flex; gap: 12px; align-items: baseline; margin: 0 0 14px; }
+  .au-price strong { font-size: 18px; font-weight: 600; }
+  .au-price s { color: #8a8178; font-size: 15px; }
+  .au-sub { margin: 0 0 16px; font-size: 15px; line-height: 1.6; color: #3a3a3a; max-width: 460px; }
+  .au-checks { list-style: none; margin: 0 0 18px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .au-checks li { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+  .au-checks li:before { content: "\2713"; width: 16px; height: 16px; border-radius: 50%; background: #5E8934; color: #fff; display: grid; place-items: center; font-size: 10px; flex: none; }
+  .au-form { max-width: 460px; }
+  .au-variant { display: flex; flex-direction: column; gap: 6px; margin: 0 0 14px; font-size: 13px; font-weight: 600; }
+  .au-variant select { font: inherit; font-weight: 400; padding: 11px 12px; border: 1px solid #222; border-radius: 0; background: #fff; color: #222; }
+  .au-qty { display: inline-flex; border: 1px solid #222; margin-bottom: 12px; }
+  .au-qty button, .au-qty b { width: 44px; height: 44px; display: grid; place-items: center; }
+  .au-qty button { border: 0; background: transparent; cursor: pointer; font: inherit; }
+  .au-atc { display: block; width: 100%; height: 48px; border: 0; background: var(--au-button); color: #fff; font: 600 13px "DM Sans", sans-serif; letter-spacing: 0.14em; text-transform: uppercase; cursor: pointer; }
+  .au-atc:disabled { opacity: 0.55; cursor: not-allowed; }
+  .au-notes { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+  @media (max-width: 800px) {
+    .au-grid { grid-template-columns: 1fr; gap: 24px; width: calc(100% - 32px); }
+    .au-hero h1 { font-size: 40px; }
+  }
+</style>
+<script>
+  (function () {
+    var root = document.getElementById("au-hero-{{ section.id }}");
+    if (!root) return;
+    var moneyFormat = {{ shop.money_format | json }};
+
+    function money(cents) {
+      var format = moneyFormat || "$" + "{" + "{amount}" + "}";
+      var match = format.match(/\{\{\s*(\w+)\s*\}\}/);
+      var kind = match ? match[1] : "amount";
+      var value = Math.abs(Math.round(cents));
+      function fixed(decimals, thousands, decimal) {
+        var parts = (value / 100).toFixed(decimals).split(".");
+        parts[0] = parts[0].replace(/(\d)(?=(\d{3})+$)/g, "$1" + thousands);
+        return parts[0] + (parts[1] ? decimal + parts[1] : "");
+      }
+      var text = kind === "amount_no_decimals" ? fixed(0, ",", ".")
+        : kind === "amount_with_comma_separator" ? fixed(2, ".", ",")
+        : kind === "amount_no_decimals_with_comma_separator" ? fixed(0, ".", ",")
+        : kind === "amount_with_apostrophe_separator" ? fixed(2, "'", ".")
+        : fixed(2, ",", ".");
+      return format.replace(/\{\{\s*\w+\s*\}\}/, text);
+    }
+
+    var main = document.getElementById("au-main-{{ section.id }}");
+    var thumbs = root.querySelectorAll("[data-au-thumb]");
+    thumbs.forEach(function (button) {
+      button.addEventListener("click", function () {
+        if (main && button.dataset.src) main.src = button.dataset.src;
+        thumbs.forEach(function (item) { item.classList.remove("is-on"); });
+        button.classList.add("is-on");
+      });
+    });
+
+    var label = root.querySelector("[data-au-qty]");
+    var input = root.querySelector("[data-au-qty-input]");
+    function setQty(next) {
+      var value = Math.max(1, next);
+      if (label) label.textContent = String(value);
+      if (input) input.value = String(value);
+    }
+    var minus = root.querySelector("[data-au-minus]");
+    var plus = root.querySelector("[data-au-plus]");
+    if (minus) minus.addEventListener("click", function () { setQty((parseInt(input.value, 10) || 1) - 1); });
+    if (plus) plus.addEventListener("click", function () { setQty((parseInt(input.value, 10) || 1) + 1); });
+
+    var select = root.querySelector("[data-au-variant]");
+    if (select) {
+      select.addEventListener("change", function () {
+        var option = select.options[select.selectedIndex];
+        var cents = parseInt(option.getAttribute("data-price"), 10) || 0;
+        var compare = parseInt(option.getAttribute("data-compare"), 10) || 0;
+        var price = root.querySelector("[data-au-price]");
+        if (price) price.textContent = money(cents);
+        var was = root.querySelector("[data-au-compare]");
+        if (was) { was.textContent = money(compare); was.hidden = !(compare > cents); }
+      });
+    }
+  })();
+</script>
+{%- endcapture -%}
+{%- comment -%} Auto RTL: any Arabic-script letter (Urdu too) flips this section to right-to-left. {%- endcomment -%}
+{%- if au_html contains 'ا' or au_html contains 'ل' or au_html contains 'ي' or au_html contains 'ة' -%}
+<div class="au-rtl" dir="rtl" style="display: contents">{{ au_html }}</div>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Tajawal:wght@400;500;700;800&display=swap">
+<style>
+  .au-rtl, .au-rtl * { letter-spacing: 0 !important; font-style: normal !important; text-transform: none !important; }
+  .au-rtl :is(p, li, span, a, button, summary, label, input, select, small, strong, em, b, td, th, div) { font-family: "DM Sans", "Tajawal", "Noto Sans Arabic", sans-serif !important; }
+  .au-rtl :is(h1, h2, h3) { font-family: "Cormorant Garamond", "Amiri", "Noto Naskh Arabic", serif !important; line-height: 1.5 !important; }
+</style>
+{%- else -%}
+{{ au_html }}
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Classic - Product hero",
+  "tag": "section",
+  "class": "fynk-classic-section",
+  "settings": [
+    { "type": "header", "content": "Text and colors" },
+    { "type": "text", "id": "add_to_cart_text", "label": "Add to cart button", "default": "Add to cart" },
+    { "type": "text", "id": "check_1", "label": "Check mark 1 (used when the product has no bullet points)", "default": "Carefully checked" },
+    { "type": "text", "id": "check_2", "label": "Check mark 2", "default": "Securely packed" },
+    { "type": "text", "id": "check_3", "label": "Check mark 3", "default": "Tracked delivery" },
+    { "type": "text", "id": "delivery_line", "label": "Delivery line", "default": "Estimated delivery: 5 to 8 days" },
+    { "type": "text", "id": "shipping_line", "label": "Shipping line", "default": "Ask us about shipping and returns" },
+    { "type": "color", "id": "button_color", "label": "Add to cart color", "default": "#3f3f3f" }
+  ],
+  "presets": [{ "name": "Classic - Product hero" }]
+}
+{% endschema %}

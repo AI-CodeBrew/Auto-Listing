@@ -120,6 +120,18 @@ CREATE TABLE IF NOT EXISTS creative_cache (
   created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+-- The Shopify stores a signed-in user connected. How many a user may have comes from the plan.
+CREATE TABLE IF NOT EXISTS shopify_stores (
+  id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL,
+  domain TEXT NOT NULL,
+  method TEXT NOT NULL DEFAULT 'client',
+  client_id TEXT NOT NULL DEFAULT '',
+  client_secret TEXT NOT NULL DEFAULT '',
+  admin_token TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS shopify_stores_owner_domain ON shopify_stores (owner_id, domain);
 """
 
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

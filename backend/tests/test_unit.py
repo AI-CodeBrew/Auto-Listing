@@ -442,6 +442,41 @@ def test_saamano_is_three_new_files():
     assert "'fynk-autolisting-product.css' | asset_url | stylesheet_tag" in files[1]["value"]
 
 
+@pytest.mark.parametrize("template_id, sections", [
+    ("classic", ["fynk-classic-faq", "fynk-classic-features", "fynk-classic-hero", "fynk-classic-special", "fynk-classic-stats", "fynk-classic-steps"]),
+])
+def test_page_templates_are_only_new_files_and_never_touch_the_theme_or_another_app(template_id, sections):
+    import re
+
+    from pla.shopify.theme import OWN_FILE
+    from pla.templates import find_template, read_template_files
+
+    template = find_template(template_id)
+    files = read_template_files(template_id)
+    suffix = template["templateSuffix"]
+    names = [f["filename"] for f in files]
+    assert names == [f"sections/{name}.liquid" for name in sections] + [f"templates/product.{suffix}.json"]
+    assert all(OWN_FILE.search(name) for name in names)
+    by_name = {f["filename"]: f["value"] for f in files}
+    page = json.loads(by_name[f"templates/product.{suffix}.json"])
+    assert sorted(page["order"]) == sections and set(page["sections"]) == set(sections)
+    for key, section in page["sections"].items():
+        source = by_name[f"sections/{section['type']}.liquid"]
+        schema = json.loads(re.search(r"\{% schema %\}(.*?)\{% endschema %\}", source, re.S).group(1))
+        known = {s.get("id") for s in schema["settings"]}
+        assert set(section.get("settings", {})) <= known, key
+        block_types = {b["type"]: {s.get("id") for s in b.get("settings", [])} for b in schema.get("blocks", [])}
+        for block in section.get("blocks", {}).values():
+            assert set(block["settings"]) <= block_types[block["type"]], key
+        assert section.get("block_order", []) == list(section.get("blocks", {}))
+        # Nothing that needs the Roarr app or a theme colour scheme.
+        assert "roarr" not in source.lower()
+        assert "color_scheme" not in source
+        assert "block_control" not in source
+        assert "product-form-component" not in source
+    assert "saamano.faq" in by_name[f"sections/fynk-{template_id}-faq.liquid"]
+
+
 def test_upload_batches():
     from pla.shopify.theme import upload_batches
 

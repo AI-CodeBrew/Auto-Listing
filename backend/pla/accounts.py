@@ -43,7 +43,8 @@ CREATE TABLE IF NOT EXISTS plans (
   searches INTEGER NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   position INTEGER NOT NULL DEFAULT 0,
-  active INTEGER NOT NULL DEFAULT 1
+  active INTEGER NOT NULL DEFAULT 1,
+  max_stores INTEGER NOT NULL DEFAULT 1
 );
 CREATE TABLE IF NOT EXISTS billing_requests (
   id TEXT PRIMARY KEY,
@@ -70,9 +71,9 @@ CREATE TABLE IF NOT EXISTS search_log (
 """
 
 DEFAULT_PLANS = [
-    {"id": "starter", "name": "Starter", "price": "Rs 1,000 / month", "searches": 25, "description": "For trying the app with a few products.", "position": 0},
-    {"id": "pro", "name": "Pro", "price": "Rs 2,500 / month", "searches": 75, "description": "For a store that lists products every week.", "position": 1},
-    {"id": "business", "name": "Business", "price": "Rs 6,000 / month", "searches": 200, "description": "For teams that list many products every day.", "position": 2},
+    {"id": "starter", "name": "Starter", "price": "Rs 1,000 / month", "searches": 25, "description": "For trying the app with a few products.", "position": 0, "max_stores": 1},
+    {"id": "pro", "name": "Pro", "price": "Rs 2,500 / month", "searches": 75, "description": "For a store that lists products every week.", "position": 1, "max_stores": 3},
+    {"id": "business", "name": "Business", "price": "Rs 6,000 / month", "searches": 200, "description": "For teams that list many products every day.", "position": 2, "max_stores": 10},
 ]
 
 _ready_path: str | None = None
@@ -84,13 +85,20 @@ def ensure_schema() -> None:
     if _ready_path == path:
         return
     db.ensure_sqlite_tables(ACCOUNT_SCHEMA)
+    if not db.is_postgres() and "max_stores" not in {row["name"] for row in db.all_rows("PRAGMA table_info(plans)")}:
+        db.execute("ALTER TABLE plans ADD COLUMN max_stores INTEGER NOT NULL DEFAULT 1")
     if not db.one("SELECT 1 AS x FROM plans LIMIT 1"):
         with db.transaction() as connection:
             for plan in DEFAULT_PLANS:
                 connection.execute(
-                    "INSERT INTO plans (id, name, price, searches, description, position, active) VALUES (?, ?, ?, ?, ?, ?, 1)",
-                    (plan["id"], plan["name"], plan["price"], plan["searches"], plan["description"], plan["position"]),
+                    "INSERT INTO plans (id, name, price, searches, description, position, active, max_stores) VALUES (?, ?, ?, ?, ?, ?, 1, ?)",
+                    (plan["id"], plan["name"], plan["price"], plan["searches"], plan["description"], plan["position"], plan["max_stores"]),
                 )
+    if not db.one("SELECT 1 AS x FROM settings WHERE key = 'plans_max_stores_v1'"):
+        # Plans made before stores had a limit get the standard limits once. The admin can change them after.
+        for plan in DEFAULT_PLANS:
+            db.execute("UPDATE plans SET max_stores = ? WHERE id = ?", (plan["max_stores"], plan["id"]))
+        db.execute("INSERT INTO settings (key, value) VALUES ('plans_max_stores_v1', '1') ON CONFLICT DO NOTHING")
     _ready_path = path
 
 
@@ -303,7 +311,7 @@ def user_overview(user_id: str) -> dict:
 def list_plans(include_inactive: bool = False) -> list[dict]:
     ensure_schema()
     rows = db.all_rows("SELECT * FROM plans" + ("" if include_inactive else " WHERE active = 1") + " ORDER BY position, name")
-    return [{**r, "active": bool(r["active"])} for r in rows]
+    return [{**{k: v for k, v in r.items() if k != "max_stores"}, "active": bool(r["active"]), "stores": int(r["max_stores"])} for r in rows]
 
 
 def update_plan(plan_id: str, fields: dict) -> dict:
@@ -322,9 +330,27 @@ def update_plan(plan_id: str, fields: dict) -> dict:
         raise AccountError("A plan needs a name and a price.")
     if searches < 1 or searches > 100_000:
         raise AccountError("Searches must be between 1 and 100000.")
+    try:
+        stores = int(fields.get("stores", plan["max_stores"]))
+    except (TypeError, ValueError):
+        raise AccountError("Stores must be a whole number.") from None
+    if stores < 1 or stores > 1000:
+        raise AccountError("Stores must be between 1 and 1000.")
     active = bool(fields.get("active", bool(plan["active"])))
-    db.execute("UPDATE plans SET name = ?, price = ?, searches = ?, description = ?, active = ? WHERE id = ?", (name, price, searches, description, int(active), plan_id))
-    return {**db.one("SELECT * FROM plans WHERE id = ?", (plan_id,)), "active": active}
+    db.execute("UPDATE plans SET name = ?, price = ?, searches = ?, description = ?, active = ?, max_stores = ? WHERE id = ?", (name, price, searches, description, int(active), stores, plan_id))
+    return next(p for p in list_plans(include_inactive=True) if p["id"] == plan_id)
+
+
+FREE_STORES = 1
+
+
+def store_allowance(user_id: str) -> dict:
+    """How many Shopify stores this user may connect, from their plan (one store without a plan)."""
+    ensure_schema()
+    row = db.one("SELECT p.max_stores AS stores, p.name AS plan_name FROM users u LEFT JOIN plans p ON p.id = u.plan_id WHERE u.id = ?", (user_id,))
+    if row and row["stores"] is not None:
+        return {"limit": int(row["stores"]), "planName": row["plan_name"]}
+    return {"limit": FREE_STORES, "planName": None}
 
 
 # ---------- Billing requests ----------

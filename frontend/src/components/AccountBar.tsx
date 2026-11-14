@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
+import { api, usePolling } from "./api";
 import { logOut, useSession } from "./session";
+import { STORES_CHANGED } from "./stores";
 import type { Status } from "./Tabs";
 
 /** Up to two letters from the name ("Saamno" → "S", "Ali Hassan" → "AH"), or the email's first letter. */
@@ -54,6 +56,7 @@ export function AccountBar({ account }: { account: Status["account"] | undefined
 
   return (
     <header className="account-bar" data-testid="account-bar">
+      {!isAdmin && <StoreSwitcher />}
       {!isAdmin && typeof left === "number" && (
         <Link href="/billing" className={left === 0 ? "account-searches is-empty" : "account-searches"} title="Get more searches" data-testid="searches-left">
           <svg className="account-searches__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -120,5 +123,51 @@ export function AccountBar({ account }: { account: Status["account"] | undefined
         )}
       </div>
     </header>
+  );
+}
+
+interface StoreChoices {
+  stores: { id: string; domain: string; active: boolean }[];
+}
+
+/** With more than one store connected, the store that pushes go to is chosen here. */
+function StoreSwitcher() {
+  const { data, refresh } = usePolling<StoreChoices>("/api/stores", 60_000);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const onChange = () => void refresh();
+    window.addEventListener(STORES_CHANGED, onChange);
+    return () => window.removeEventListener(STORES_CHANGED, onChange);
+  }, [refresh]);
+  if (!data || data.stores.length < 2) return null;
+  const active = data.stores.find((store) => store.active) ?? data.stores[0];
+  return (
+    <label className="store-switch" title="The Shopify store your pushes go to">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M4 9l1.2-4.5h13.6L20 9M4 9h16M4 9v10.5h16V9M9.5 19.5v-5h5v5" />
+      </svg>
+      <select
+        aria-label="Active store"
+        value={active.id}
+        disabled={busy}
+        data-testid="store-switcher"
+        onChange={async (event) => {
+          setBusy(true);
+          try {
+            await api(`/api/stores/${event.target.value}/activate`, { json: {} });
+            // A full load, so every page shows the chosen store.
+            window.location.reload();
+          } catch {
+            setBusy(false);
+          }
+        }}
+      >
+        {data.stores.map((store) => (
+          <option key={store.id} value={store.id}>
+            {store.domain}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

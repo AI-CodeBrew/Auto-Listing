@@ -1,0 +1,84 @@
+{%- comment -%}
+  FynkTech Classic product page, part 6: "Good to know" with open-and-close questions. A product pushed from the
+  FynkTech app shows its own AI-written questions ("saamano.faq", a list of "question|answer"). Otherwise the
+  questions set here in the theme editor are shown.
+{%- endcomment -%}
+{%- capture au_html -%}
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;1,500&family=DM+Sans:wght@400;500;600&display=swap">
+{%- assign product_faq = product.metafields.saamano.faq.value -%}
+<section class="au-faq">
+  {%- if section.settings.label != blank -%}<p>{{ section.settings.label | escape }}</p>{%- endif -%}
+  <h2>{{ section.settings.heading | escape }}</h2>
+  <div class="au-faq-list">
+    {%- if product_faq != blank -%}
+      {%- for entry in product_faq -%}
+        {%- assign parts = entry | split: '|' -%}
+        {%- assign question = parts | first -%}
+        {%- assign answer = entry | remove_first: question | remove_first: '|' -%}
+        <details>
+          <summary>{{ question | escape }}</summary>
+          {%- if answer != blank -%}<p>{{ answer | escape }}</p>{%- endif -%}
+        </details>
+      {%- endfor -%}
+    {%- else -%}
+      {%- for block in section.blocks -%}
+        <details {{ block.shopify_attributes }}>
+          <summary>{{ block.settings.question | escape }}</summary>
+          {%- if block.settings.answer != blank -%}<p>{{ block.settings.answer | escape }}</p>{%- endif -%}
+        </details>
+      {%- endfor -%}
+    {%- endif -%}
+  </div>
+</section>
+<style>
+  .au-faq { background: #fff; color: #222; font-family: "DM Sans", sans-serif; padding: 56px 0 56px; text-align: center; }
+  .au-faq > p { margin: 0; letter-spacing: 0.18em; text-transform: uppercase; font-size: 12px; font-weight: 700; }
+  .au-faq h2 { font-family: "Cormorant Garamond", serif; font-weight: 500; font-style: italic; font-size: 52px; line-height: 1.1; margin: 10px auto 28px; }
+  .au-faq-list { width: min(760px, calc(100% - 48px)); margin: 0 auto; text-align: start; border-bottom: 1px solid #e4e0db; }
+  .au-faq details { border-top: 1px solid #e4e0db; }
+  .au-faq summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 18px 0; font-size: 16px; font-weight: 500; outline: none; }
+  .au-faq summary::-webkit-details-marker { display: none; }
+  .au-faq summary::marker { content: none; }
+  .au-faq summary:after { content: ""; width: 8px; height: 8px; border-right: 1.5px solid #222; border-bottom: 1.5px solid #222; transform: rotate(45deg); flex: none; margin-inline-end: 4px; }
+  .au-faq details[open] summary:after { transform: rotate(-135deg); margin-top: 4px; }
+  .au-faq details p { margin: 0 0 18px; font-size: 15px; line-height: 1.6; color: #3a3a3a; max-width: 640px; }
+  @media (max-width: 800px) { .au-faq h2 { font-size: 40px; } }
+</style>
+{%- endcapture -%}
+{%- if au_html contains 'ا' or au_html contains 'ل' or au_html contains 'ي' or au_html contains 'ة' -%}
+<div class="au-rtl" dir="rtl" style="display: contents">{{ au_html }}</div>
+{%- else -%}
+{{ au_html }}
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Classic - FAQ",
+  "tag": "section",
+  "class": "fynk-classic-section",
+  "settings": [
+    { "type": "text", "id": "label", "label": "Small heading", "default": "FAQs" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Good to know" }
+  ],
+  "blocks": [
+    {
+      "type": "faq_item",
+      "name": "Question",
+      "settings": [
+        { "type": "text", "id": "question", "label": "Question", "default": "How long does shipping take?" },
+        { "type": "textarea", "id": "answer", "label": "Answer", "default": "Orders are sent with tracking. Delivery time depends on where you live, and you will see it at checkout." }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Classic - FAQ",
+      "blocks": [
+        { "type": "faq_item" },
+        { "type": "faq_item", "settings": { "question": "What payment methods do you accept?", "answer": "You can pay with the methods shown at checkout." } },
+        { "type": "faq_item", "settings": { "question": "Can I return my order?", "answer": "If something is not right, contact us and we will help." } }
+      ]
+    }
+  ]
+}
+{% endschema %}

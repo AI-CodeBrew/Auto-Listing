@@ -1,0 +1,89 @@
+{%- comment -%}
+  FynkTech Classic product page, part 5: three steps with round pictures. The pictures are the product's own
+  photos. The steps are set here in the theme editor.
+{%- endcomment -%}
+{%- capture au_html -%}
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=DM+Sans:wght@400;500;600&display=swap">
+{%- liquid
+  assign p = product
+  assign photo_1 = p.images[2] | default: p.featured_image
+  assign photo_2 = p.images[3] | default: p.images[1] | default: p.featured_image
+  assign photo_3 = p.images[4] | default: p.images[0] | default: p.featured_image
+-%}
+<section class="au-steps">
+  {%- if section.settings.label != blank -%}<p>{{ section.settings.label | escape }}</p>{%- endif -%}
+  {%- if section.settings.heading != blank -%}<h2>{{ section.settings.heading | escape }}</h2>{%- endif -%}
+  {%- if section.settings.body != blank -%}<span>{{ section.settings.body | escape }}</span>{%- endif -%}
+  <div class="au-steps-grid">
+    {%- for block in section.blocks limit: 3 -%}
+      {%- liquid
+        case forloop.index
+          when 1
+            assign photo = photo_1
+          when 2
+            assign photo = photo_2
+          else
+            assign photo = photo_3
+        endcase
+      -%}
+      <article {{ block.shopify_attributes }}>
+        {%- if photo != blank -%}<img src="{{ photo | image_url: width: 800 }}" alt="" loading="lazy">{%- endif -%}
+        <b>Step 0{{ forloop.index }}</b>
+        <h3>{{ block.settings.title | escape }}</h3>
+        {%- if block.settings.text != blank -%}<em>{{ block.settings.text | escape }}</em>{%- endif -%}
+      </article>
+    {%- endfor -%}
+  </div>
+</section>
+<style>
+  .au-steps { background: #fff; color: #222; font-family: "DM Sans", sans-serif; padding: 72px 0 32px; text-align: center; }
+  .au-steps > p { margin: 0; letter-spacing: 0.18em; text-transform: uppercase; font-size: 12px; font-weight: 700; }
+  .au-steps h2 { font-family: "Cormorant Garamond", serif; font-weight: 500; font-style: italic; font-size: 52px; line-height: 1.1; margin: 10px auto; max-width: 720px; }
+  .au-steps > span { display: block; max-width: 560px; margin: 0 auto 36px; font-size: 15px; line-height: 1.6; color: #3a3a3a; }
+  .au-steps-grid { width: min(980px, calc(100% - 48px)); margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+  .au-steps img { width: min(300px, 100%); aspect-ratio: 1; height: auto; border-radius: 50%; object-fit: cover; object-position: center; display: block; margin: 0 auto 18px; }
+  .au-steps b { display: block; letter-spacing: 0.14em; text-transform: uppercase; font-size: 11px; font-weight: 600; margin-bottom: 6px; }
+  .au-steps h3 { font-family: "DM Sans", sans-serif; font-weight: 600; font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; margin: 0 0 8px; }
+  .au-steps em { display: block; font-style: normal; font-size: 14px; line-height: 1.5; color: #3a3a3a; }
+  @media (max-width: 800px) { .au-steps-grid { grid-template-columns: 1fr; } .au-steps h2 { font-size: 40px; } }
+</style>
+{%- endcapture -%}
+{%- if au_html contains 'ا' or au_html contains 'ل' or au_html contains 'ي' or au_html contains 'ة' -%}
+<div class="au-rtl" dir="rtl" style="display: contents">{{ au_html }}</div>
+{%- else -%}
+{{ au_html }}
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Classic - Steps",
+  "tag": "section",
+  "class": "fynk-classic-section",
+  "settings": [
+    { "type": "text", "id": "label", "label": "Small heading", "default": "How it works" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "It's time to achieve more with less" },
+    { "type": "textarea", "id": "body", "label": "Text under the heading", "default": "Three easy steps from your screen to your door." }
+  ],
+  "blocks": [
+    {
+      "type": "step",
+      "name": "Step",
+      "limit": 3,
+      "settings": [
+        { "type": "text", "id": "title", "label": "Title", "default": "Choose your option" },
+        { "type": "textarea", "id": "text", "label": "Text", "default": "Pick the size or style you like." }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Classic - Steps",
+      "blocks": [
+        { "type": "step", "settings": { "title": "Choose your option", "text": "Pick the size or style you like." } },
+        { "type": "step", "settings": { "title": "Place your order", "text": "Secure checkout takes a minute." } },
+        { "type": "step", "settings": { "title": "Receive and enjoy", "text": "We send it with tracking." } }
+      ]
+    }
+  ]
+}
+{% endschema %}

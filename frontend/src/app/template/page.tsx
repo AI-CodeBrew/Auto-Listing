@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { formatBytes, safeHref, usePolling } from "@/components/api";
+import { useEffect, useState } from "react";
+import { api, formatBytes, safeHref, usePolling } from "@/components/api";
+import { HoverScrollImage } from "@/components/HoverScrollImage";
 import { SaamanoPreview } from "@/components/SaamanoPreview";
 import { SAMPLE_PRODUCT, SAMPLE_RELATED, SAMPLE_STORY } from "@/components/sample-product";
 
@@ -27,8 +28,10 @@ interface Template {
   id: string;
   name: string;
   templateSuffix: string;
-  description: string;
-  productPage: string[];
+  tagline: string;
+  useForNew: boolean;
+  preview: string;
+  afterPush: string;
   files: number;
   bytes: number;
   lastPush: Push | null;
@@ -43,12 +46,11 @@ interface Data {
 export default function TemplatePage() {
   const { data, error, refresh } = usePolling<Data>("/api/templates", 60_000);
   const connected = Boolean(data && data.store.missing.length === 0);
-
   return (
     <div className="page stack">
       <header className="page-head">
         <h1>Template</h1>
-        <p>Product page designs. A push adds the page to your store&apos;s current theme. The rest of your store stays as it is.</p>
+        <p>Product page designs. A push adds the page to your store&apos;s theme. Nothing else changes.</p>
       </header>
 
       {error && <p className="error" role="alert">{error}</p>}
@@ -60,9 +62,11 @@ export default function TemplatePage() {
         </div>
       )}
 
-      {data?.templates.map((template) => (
-        <TemplateCard key={template.id} template={template} domain={data.store.domain} connected={connected} busyElsewhere={data.running} onPushed={refresh} />
-      ))}
+      <div className="tpl-grid">
+        {data?.templates.map((template) => (
+          <TemplateCard key={template.id} template={template} domain={data.store.domain} connected={connected} busyElsewhere={data.running} onPushed={refresh} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -86,11 +90,9 @@ function TemplateCard({
   const [message, setMessage] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const running = status === "running";
-  // The app can draw this design itself, so it can be seen before it is pushed.
-  const canPreview = template.id === "saamano";
 
   async function push() {
-    const question = `This adds the ${template.name} to the live theme of ${domain}. It only adds new files: your home page, header, footer, contact page and other products do not change. Only products you push from this app will use it. Push now?`;
+    const question = `This adds the ${template.name} to the live theme of ${domain}${template.useForNew ? "" : " and uses it for the products you push from now on"}. It only adds new files: your home page, header, footer, contact page and other products do not change. Continue?`;
     if (!window.confirm(question)) return;
     setStatus("running");
     setSteps([]);
@@ -106,6 +108,7 @@ function TemplateCard({
       const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
       let buffer = "";
       let finished = false;
+      let pushed = false;
       for (;;) {
         const { value, done } = await reader.read();
         if (value) buffer += value;
@@ -120,6 +123,7 @@ function TemplateCard({
             setResult(event.result);
             setStatus("done");
             finished = true;
+            pushed = true;
           }
           if (event.type === "error") {
             setMessage(event.message ?? "The push failed.");
@@ -130,6 +134,8 @@ function TemplateCard({
         if (done) break;
       }
       if (!finished) throw new Error("The connection closed before the push finished. Check Online Store → Themes in your Shopify admin.");
+      // Only one page is set at a time: the one just added is now the page new products get.
+      if (pushed && !template.useForNew) await api(`/api/templates/${template.id}/use`, { json: {} });
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
       setStatus("error");
@@ -139,110 +145,145 @@ function TemplateCard({
   }
 
   const last = template.lastPush;
+  // Only the page that is set shows its status. The other pages show a button to use them instead.
+  const shown = template.useForNew ? (result ?? last) : null;
 
   return (
-    <section className="card stack" data-testid={`template-${template.id}`}>
-      <div className="row row-between">
-        <div className="stack-tight">
-          <h2>{template.name}</h2>
-          <p className="muted small">
-            Adds {template.files} files to your theme · {formatBytes(template.bytes)}
-          </p>
+    <section className="tpl-card" data-testid={`template-${template.id}`}>
+      <div className="tpl-thumb">
+        <HoverScrollImage src={template.preview} alt={`${template.name} preview`} />
+        {template.useForNew && (
+          <span className="tpl-badge" data-testid="template-in-use">
+            Used for new products
+          </span>
+        )}
+
+      {shown && (
+        <div className="tpl-strip" data-testid={result ? "template-push-result" : "template-last-push"}>
+          <span className="tpl-ok">
+            <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M4.5 10.5l3.5 3.5 7.5-8" />
+            </svg>
+            Set up in your store
+          </span>
+          <span className="tpl-date" title={shown.themeName}>
+            {new Date(shown.at).toLocaleDateString()}
+          </span>
+          <PushLinks push={shown} />
         </div>
-        <div className="row">
-          {canPreview && (
-            <button className="btn" type="button" onClick={() => setPreviewing(true)} data-testid="template-preview">
-              Preview
-            </button>
-          )}
-          <button className="btn btn-primary" type="button" disabled={!connected || running || busyElsewhere} onClick={push} data-testid="template-push">
-            {running ? "Pushing..." : "Push to Shopify"}
+        )}
+      </div>
+
+      <div className="tpl-body">
+        <div className="tpl-head">
+          <div className="tpl-titlebar">
+            <h2>{template.name}</h2>
+            <span className="tpl-meta">
+              {template.files} files · {formatBytes(template.bytes)}
+            </span>
+          </div>
+          <p className="tpl-tagline">{template.tagline}</p>
+        </div>
+
+        <div className="tpl-actions">
+          <button className="btn tpl-btn" type="button" onClick={() => setPreviewing(true)} data-testid="template-preview">
+            Preview
+          </button>
+          <button className="btn btn-primary tpl-btn" type="button" disabled={!connected || running || busyElsewhere} onClick={push} data-testid="template-push">
+            {running ? "Adding..." : !template.useForNew ? "Use this page" : shown ? "Update in my store" : "Add to my store"}
           </button>
         </div>
-      </div>
-      {previewing && <SaamanoPreview sampleStory={SAMPLE_STORY} product={SAMPLE_PRODUCT} related={SAMPLE_RELATED} onClose={() => setPreviewing(false)} />}
 
-      <p>{template.description}</p>
-      <div className="stack-tight">
-        <h3>The product page</h3>
-        <ol>
-          {template.productPage.map((part) => (
-            <li key={part}>{part}</li>
-          ))}
-        </ol>
-      </div>
-
-      {running && (
-        <div className="activity" role="status" data-testid="template-push-progress">
-          <div className="activity-live">
-            <span className="activity-pulse" aria-hidden="true" />
-            <p className="activity-now">{steps.at(-1) ?? "Starting..."}</p>
+        {running && (
+          <div className="activity" role="status" data-testid="template-push-progress">
+            <div className="activity-live">
+              <span className="activity-pulse" aria-hidden="true" />
+              <p className="activity-now">{steps.at(-1) ?? "Starting..."}</p>
+            </div>
+            {steps.length > 1 && (
+              <ol className="activity-log">
+                {steps.slice(0, -1).map((step, index) => (
+                  <li key={index}>{step}</li>
+                ))}
+              </ol>
+            )}
           </div>
-          {steps.length > 1 && (
-            <ol className="activity-log">
-              {steps.slice(0, -1).map((step, index) => (
-                <li key={index}>{step}</li>
-              ))}
-            </ol>
-          )}
-        </div>
-      )}
+        )}
 
-      {status === "error" && message && (
-        <div className="notice notice-error" role="alert" data-testid="template-push-error">
-          {message}
-        </div>
-      )}
+        {status === "error" && message && (
+          <div className="notice notice-error" role="alert" data-testid="template-push-error">
+            {message}
+          </div>
+        )}
 
-      {result && (
-        <div className={result.warnings.length ? "notice notice-warn" : "notice"} role="status" data-testid="template-push-result">
-          <span>
-            <strong>The product page is in your live theme &quot;{result.themeName}&quot; on {result.domain}.</strong>
-          </span>
-          <PushLinks push={result} />
-          <span className="small">
-            {result.uploaded} files added. Nothing else in your store changed.
-          </span>
-          {result.warnings.length > 0 && (
+        {result && result.warnings.length > 0 && (
+          <div className="notice notice-warn" role="status">
             <ul className="small">
               {result.warnings.map((warning) => (
                 <li key={warning}>{warning}</li>
               ))}
             </ul>
-          )}
-          <span className="small">
-            Products you push from <strong>Approved listings</strong> now use this page. Your other products keep their usual page.
-          </span>
-        </div>
-      )}
+          </div>
+        )}
 
-      {!result && last && (
-        <div className="stack-tight small" data-testid="template-last-push">
-          <span className="muted">
-            Added to your theme &quot;{last.themeName}&quot; on {new Date(last.at).toLocaleString()}.
-          </span>
-          <PushLinks push={last} />
-        </div>
-      )}
+        {result && <p className="tpl-note">{template.afterPush}</p>}
+      </div>
+
+      {previewing && template.id === "saamano" && <SaamanoPreview sampleStory={SAMPLE_STORY} product={SAMPLE_PRODUCT} related={SAMPLE_RELATED} onClose={() => setPreviewing(false)} />}
+      {previewing && template.id !== "saamano" && <RenderedPreview name={template.name} src={`/template-preview/${template.id}.html`} onClose={() => setPreviewing(false)} />}
+
     </section>
   );
 }
 
-function PushLinks({ push }: { push: Push }) {
+/** The page as the store draws it: the real Liquid files, rendered once with the sample product. */
+function RenderedPreview({ name, src, onClose }: { name: string; src: string; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    // Escape pressed inside the page: the page tells this window (see the script in the preview file).
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin === window.location.origin && event.data === "fynk-close-preview") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("message", onMessage);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("message", onMessage);
+    };
+  }, [onClose]);
+  return (
+    <div className="sp-overlay" role="dialog" aria-modal="true" aria-label={`${name} preview`} data-testid="rendered-preview">
+      <div className="sp-bar">
+        <p>
+          <strong>{name}</strong> · A sample product, so you can see the design before you push. Your products show their own photos and text.
+        </p>
+        <button className="btn" type="button" onClick={onClose}>
+          Close
+        </button>
+      </div>
+      <iframe className="tpl-frame" src={src} title={`${name} preview`} data-testid="rendered-frame" />
+    </div>
+  );
+}
+
+function PushLinks({ push, before }: { push: Push; before?: React.ReactNode }) {
   const links = [
-    { label: "Preview the product page", href: push.productPreviewUrl },
-    { label: "Open in theme editor", href: push.editorUrl },
+    { label: "Preview page", href: push.productPreviewUrl },
+    { label: "Theme editor", href: push.editorUrl },
   ];
   return (
-    <div className="row row-wrap">
+    <span className="tpl-links">
+      {before}
       {links.map((link) => {
         const href = safeHref(link.href);
         return href ? (
-          <a key={link.label} className="btn" href={href} target="_blank" rel="noopener noreferrer">
+          <a key={link.label} className="tpl-link" href={href} target="_blank" rel="noopener noreferrer">
             {link.label}
           </a>
         ) : null;
       })}
-    </div>
+    </span>
   );
 }

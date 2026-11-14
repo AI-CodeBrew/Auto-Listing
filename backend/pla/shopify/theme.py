@@ -8,7 +8,7 @@ import time
 from datetime import datetime, timezone
 from urllib.parse import quote
 
-from ..settings import save_template_push, shopify_credentials
+from ..settings import pin_active_store, save_template_push, shopify_credentials
 from ..templates import read_template_files
 from .client import ShopifyError, graphql, missing_shopify_settings
 
@@ -98,6 +98,7 @@ def push_theme_template(template: dict, on_progress=lambda step: None) -> dict:
     if not _running.acquire(blocking=False):
         raise ShopifyError("A theme push is already running. Wait for it to finish.")
     try:
+        pin_active_store()
         return _push(template, on_progress)
     finally:
         _running.release()

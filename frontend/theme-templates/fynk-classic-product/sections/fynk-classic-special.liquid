@@ -1,0 +1,137 @@
+{%- comment -%}
+  FynkTech Classic product page, part 2: tabs "Product detail" and "Shipping and return". The detail tab
+  shows a big heading with open-and-close lines beside a photo. The text comes from the product's own
+  "saamano.features" metafield (a list of "title|text"), written by the FynkTech app.
+{%- endcomment -%}
+{%- capture au_html -%}
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=DM+Sans:wght@400;500;600&display=swap">
+{%- liquid
+  assign p = product
+  assign mf = p.metafields.saamano
+  assign items = mf.features.value
+  if items == blank
+    assign items = mf.highlights.value
+  endif
+  assign photo = p.images[1] | default: p.featured_image
+  assign intro = p.description | split: '<ul' | first | split: '<ol' | first | replace: '</p>', ' ' | strip_html | strip | truncatewords: 30
+-%}
+<section class="au-detail">
+  <div class="au-tabs" role="tablist">
+    <button type="button" class="is-on" data-au-tab="detail">{{ section.settings.tab_1 | escape }}</button>
+    <button type="button" data-au-tab="ship">{{ section.settings.tab_2 | escape }}</button>
+  </div>
+
+  <div class="au-panel" data-au-panel="detail">
+    <div class="au-why">
+      <div>
+        <p class="au-kicker">{{ section.settings.kicker | escape }}</p>
+        {%- if items != blank -%}
+          {%- for entry in items limit: 5 -%}
+            {%- assign parts = entry | split: '|' -%}
+            {%- assign title = parts | first -%}
+            {%- assign text = entry | remove_first: title | remove_first: '|' -%}
+            {%- if forloop.first -%}
+              <h2>{{ title | escape }}</h2>
+              {%- if text != blank -%}<p class="au-lead">{{ text | escape }}</p>{%- endif -%}
+            {%- else -%}
+              <details>
+                <summary>{{ title | escape }}</summary>
+                {%- if text != blank -%}<p>{{ text | escape }}</p>{%- endif -%}
+              </details>
+            {%- endif -%}
+          {%- endfor -%}
+        {%- else -%}
+          <h2>{{ p.title | escape }}</h2>
+          {%- if intro != blank -%}<p class="au-lead">{{ intro }}</p>{%- endif -%}
+        {%- endif -%}
+      </div>
+      {%- if photo != blank -%}<img src="{{ photo | image_url: width: 1400 }}" alt="{{ p.title | escape }}" loading="lazy">{%- endif -%}
+    </div>
+  </div>
+
+  <div class="au-panel au-ship" data-au-panel="ship" hidden>
+    <div>
+      <h2>{{ section.settings.ship_heading | escape }}</h2>
+      {%- if section.settings.ship_1 != blank -%}<p>{{ section.settings.ship_1 | escape }}</p>{%- endif -%}
+      {%- if section.settings.ship_2 != blank -%}<p>{{ section.settings.ship_2 | escape }}</p>{%- endif -%}
+    </div>
+    <div>
+      <h2>{{ section.settings.returns_heading | escape }}</h2>
+      {%- if section.settings.returns_text != blank -%}<p>{{ section.settings.returns_text | escape }}</p>{%- endif -%}
+    </div>
+  </div>
+</section>
+<style>
+  .au-detail { background: #fff; color: #222; font-family: "DM Sans", sans-serif; }
+  .au-panel[hidden] { display: none !important; }
+  .au-tabs { display: flex; justify-content: center; gap: 48px; padding: 28px 16px 8px; }
+  .au-tabs button { border: 0; background: transparent; cursor: pointer; font: 500 16px "DM Sans", sans-serif; color: #222; padding: 0 0 6px; }
+  .au-tabs button.is-on { box-shadow: inset 0 -1px 0 #222; }
+  .au-why { width: min(1100px, calc(100% - 48px)); margin: 0 auto; padding: 36px 0 72px; display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 48px; align-items: center; }
+  .au-kicker { margin: 0 0 12px; letter-spacing: 0.18em; text-transform: uppercase; font-size: 12px; font-weight: 600; }
+  .au-why h2 { font-family: "Cormorant Garamond", serif; font-weight: 500; font-size: 64px; line-height: 0.95; margin: 0 0 16px; }
+  .au-lead { margin: 0 0 20px; font-size: 15px; line-height: 1.6; color: #3a3a3a; max-width: 420px; }
+  .au-why details { border-top: 1px solid #e4e0db; }
+  .au-why summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; padding: 16px 0; letter-spacing: 0.12em; text-transform: uppercase; font-size: 14px; font-weight: 600; outline: none; }
+  .au-why summary::-webkit-details-marker { display: none; }
+  .au-why summary::marker { content: none; }
+  .au-why summary:after { content: ""; width: 8px; height: 8px; border-right: 1.5px solid #222; border-bottom: 1.5px solid #222; transform: rotate(45deg); flex: none; }
+  .au-why details[open] summary:after { transform: rotate(-135deg); margin-top: 4px; }
+  .au-why details p { margin: 0 0 16px; font-size: 14px; line-height: 1.6; color: #3a3a3a; }
+  .au-why img { width: 100%; height: auto; object-fit: cover; display: block; }
+  .au-ship { width: min(980px, calc(100% - 80px)); margin: 0 auto; padding: 56px 0 88px; display: grid; grid-template-columns: 1fr 1fr; column-gap: 72px; text-align: start; }
+  .au-ship h2 { font-family: "DM Sans", sans-serif; font-weight: 700; font-size: 22px; letter-spacing: 0.02em; text-transform: uppercase; margin: 0 0 14px; }
+  .au-ship p { margin: 0 0 16px; font-size: 15px; line-height: 1.55; color: #222; }
+  @media (max-width: 800px) {
+    .au-why { grid-template-columns: 1fr; width: calc(100% - 32px); }
+    .au-why h2 { font-size: 48px; }
+    .au-ship { grid-template-columns: 1fr; width: calc(100% - 32px); row-gap: 32px; }
+  }
+</style>
+<script>
+  (function () {
+    document.querySelectorAll(".au-detail").forEach(function (root) {
+      var tabs = root.querySelectorAll("[data-au-tab]");
+      var panels = root.querySelectorAll("[data-au-panel]");
+      tabs.forEach(function (tab) {
+        tab.addEventListener("click", function () {
+          var name = tab.getAttribute("data-au-tab");
+          tabs.forEach(function (item) { item.classList.toggle("is-on", item === tab); });
+          panels.forEach(function (panel) { panel.hidden = panel.getAttribute("data-au-panel") !== name; });
+        });
+      });
+    });
+  })();
+</script>
+{%- endcapture -%}
+{%- if au_html contains 'ا' or au_html contains 'ل' or au_html contains 'ي' or au_html contains 'ة' -%}
+<div class="au-rtl" dir="rtl" style="display: contents">{{ au_html }}</div>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Tajawal:wght@400;500;700;800&display=swap">
+<style>
+  .au-rtl, .au-rtl * { letter-spacing: 0 !important; font-style: normal !important; text-transform: none !important; }
+  .au-rtl :is(p, li, span, a, button, summary, label, input, select, small, strong, em, b, td, th, div) { font-family: "DM Sans", "Tajawal", "Noto Sans Arabic", sans-serif !important; }
+  .au-rtl :is(h1, h2, h3) { font-family: "Cormorant Garamond", "Amiri", "Noto Naskh Arabic", serif !important; line-height: 1.5 !important; }
+</style>
+{%- else -%}
+{{ au_html }}
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Classic - Product detail",
+  "tag": "section",
+  "class": "fynk-classic-section",
+  "settings": [
+    { "type": "text", "id": "tab_1", "label": "First tab", "default": "Product detail" },
+    { "type": "text", "id": "tab_2", "label": "Second tab", "default": "Shipping and return" },
+    { "type": "text", "id": "kicker", "label": "Small heading", "default": "Why is it special?" },
+    { "type": "header", "content": "Shipping and return tab" },
+    { "type": "text", "id": "ship_heading", "label": "Shipping heading", "default": "Shipping" },
+    { "type": "textarea", "id": "ship_1", "label": "Shipping text 1", "default": "Orders are packed with care and sent with tracking." },
+    { "type": "textarea", "id": "ship_2", "label": "Shipping text 2", "default": "You will receive an update as soon as your parcel ships." },
+    { "type": "text", "id": "returns_heading", "label": "Returns heading", "default": "Returns" },
+    { "type": "textarea", "id": "returns_text", "label": "Returns text", "default": "If something is not right with your order, contact us and we will make it right." }
+  ],
+  "presets": [{ "name": "Classic - Product detail" }]
+}
+{% endschema %}

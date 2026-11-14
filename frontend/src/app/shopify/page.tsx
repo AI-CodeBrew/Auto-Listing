@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, usePolling } from "@/components/api";
 import { SerpKeys } from "@/components/SerpKeys";
 import { useSession } from "@/components/session";
+import { announceStoresChanged } from "@/components/stores";
 
 type Method = "client" | "token";
 
@@ -21,6 +23,22 @@ const METHODS: { id: Method; label: string }[] = [
   { id: "token", label: "Admin token" },
 ];
 
+interface Store {
+  id: string;
+  domain: string;
+  method: Method;
+  active: boolean;
+}
+
+interface StoresData {
+  stores: Store[];
+  limit: number | null;
+  used: number;
+  canAdd: boolean;
+  planName: string | null;
+  admin: boolean;
+}
+
 interface TestResult {
   shopName: string;
   domain: string;
@@ -29,6 +47,9 @@ interface TestResult {
 
 export default function ShopifyPage() {
   const summary = usePolling<Summary>("/api/settings/shopify", 60_000);
+  const stores = usePolling<StoresData>("/api/stores", 60_000);
+  // Adding another store: the form is blank and saves a new store instead of changing the active one.
+  const [adding, setAdding] = useState(false);
   // SerpAPI keys belong to the admin. Users only connect their own Shopify store.
   const isAdmin = useSession().session?.role === "admin";
   const [domain, setDomain] = useState("");
@@ -52,7 +73,7 @@ export default function ShopifyPage() {
     }
   }, [summary.data, loaded]);
 
-  const saved = summary.data;
+  const saved = adding ? null : summary.data;
   const connected = Boolean(
     saved && saved.domain && (saved.method === "token" ? saved.hasAdminToken : saved.clientId && saved.hasSecret),
   );
@@ -65,12 +86,80 @@ export default function ShopifyPage() {
     setMessage(null);
     setTest(null);
     try {
+      if (adding) {
+        await api<StoresData>("/api/stores", { method: "POST", json: { method, domain, clientId, clientSecret, adminToken } });
+        setAdding(false);
+        setClientSecret("");
+        setAdminToken("");
+        setMessage("Store added and selected. Press Test connection to check that Shopify accepts these details.");
+        await Promise.all([summary.refresh(), stores.refresh()]);
+      announceStoresChanged();
+        setLoaded(false);
+        return;
+      }
       const body = await api<Summary>("/api/settings/shopify", { method: "PUT", json: { method, domain, clientId, clientSecret, adminToken } });
       setDomain(body.domain);
       setClientSecret("");
       setAdminToken("");
       setMessage("Saved. Press Test connection to check that Shopify accepts these details.");
-      await summary.refresh();
+      await Promise.all([summary.refresh(), stores.refresh()]);
+      announceStoresChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function startAdding() {
+    setAdding(true);
+    setMethod("client");
+    setDomain("");
+    setClientId("");
+    setClientSecret("");
+    setAdminToken("");
+    setError(null);
+    setMessage(null);
+    setTest(null);
+  }
+
+  function cancelAdding() {
+    setAdding(false);
+    setError(null);
+    setMessage(null);
+    setLoaded(false);
+  }
+
+  async function useStore(id: string) {
+    setBusy("save");
+    setError(null);
+    setMessage(null);
+    setTest(null);
+    try {
+      await api<StoresData>(`/api/stores/${id}/activate`, { json: {} });
+      setAdding(false);
+      await Promise.all([summary.refresh(), stores.refresh()]);
+      announceStoresChanged();
+      setLoaded(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function removeStore(store: Store) {
+    if (!window.confirm(`Remove ${store.domain} from this app? Products already in that store stay there.`)) return;
+    setBusy("remove");
+    setError(null);
+    setMessage(null);
+    setTest(null);
+    try {
+      await api<StoresData>(`/api/stores/${store.id}`, { method: "DELETE" });
+      await Promise.all([summary.refresh(), stores.refresh()]);
+      announceStoresChanged();
+      setLoaded(false);
+      setMessage(`${store.domain} removed.`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -106,7 +195,9 @@ export default function ShopifyPage() {
       setClientSecret("");
       setAdminToken("");
       setMessage("Shopify details removed.");
-      await summary.refresh();
+      await Promise.all([summary.refresh(), stores.refresh()]);
+      announceStoresChanged();
+      setLoaded(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -134,14 +225,62 @@ export default function ShopifyPage() {
       </div>
       {isAdmin && open === "serp" && <SerpKeys controls />}
       {open === "shopify" && <>
+      {stores.data && !stores.data.admin && (
+        <section className="card stack" data-testid="stores-card">
+          <div className="row row-between">
+            <h2>Your stores</h2>
+            <span className="muted small" data-testid="store-count">
+              {stores.data.used} of {stores.data.limit} {stores.data.limit === 1 ? "store" : "stores"}
+              {stores.data.planName ? ` · ${stores.data.planName} plan` : ""}
+            </span>
+          </div>
+          {stores.data.stores.length > 0 && (
+            <ul className="store-list">
+              {stores.data.stores.map((store) => (
+                <li key={store.id} className="store-row" data-testid="store-row" data-store={store.domain}>
+                  <span className="store-name">
+                    <strong>{store.domain}</strong>
+                    <small className="muted">{store.method === "token" ? "Admin token" : "Client ID + secret"}</small>
+                  </span>
+                  {store.active ? (
+                    <span className="pill pill-shopify-draft">Active</span>
+                  ) : (
+                    <button type="button" className="btn" disabled={busy !== null} onClick={() => void useStore(store.id)} data-testid="store-use">
+                      Use this store
+                    </button>
+                  )}
+                  <button type="button" className="store-remove" disabled={busy !== null} onClick={() => void removeStore(store)} aria-label={`Remove ${store.domain}`} data-testid="store-remove">
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {stores.data.canAdd && !adding && stores.data.used > 0 && (
+            <div>
+              <button type="button" className="btn" onClick={startAdding} disabled={busy !== null} data-testid="store-add">
+                Add another store
+              </button>
+            </div>
+          )}
+          {!stores.data.canAdd && (
+            <p className="notice notice-warn" role="status" data-testid="store-limit">
+              <span>
+                {stores.data.planName ? `Your ${stores.data.planName} plan` : "Your free account"} allows {stores.data.limit} {stores.data.limit === 1 ? "store" : "stores"}.{" "}
+                <Link href="/billing">Choose a bigger plan</Link> to connect more.
+              </span>
+            </p>
+          )}
+        </section>
+      )}
       <section className="card stack">
         <div className="row row-between">
           <h2 className="row">
             <ShopifyLogo />
-            Shopify
+            {adding ? "New store" : "Shopify"}
           </h2>
           <span className={connected ? "pill pill-shopify-draft" : "pill pill-muted"} data-testid="shopify-connection-state">
-            {connected ? "Details saved" : "Not connected"}
+            {adding ? "Not saved yet" : connected ? "Details saved" : "Not connected"}
           </span>
         </div>
         <p className="muted">
@@ -250,11 +389,16 @@ export default function ShopifyPage() {
 
           <div className="row">
             <button className="btn btn-primary" type="submit" disabled={busy !== null} data-testid="shopify-save">
-              {busy === "save" ? "Saving..." : "Save"}
+              {busy === "save" ? "Saving..." : adding ? "Add store" : "Save"}
             </button>
             <button className="btn" type="button" disabled={busy !== null || !connected} onClick={testConnection} data-testid="shopify-test">
               {busy === "test" ? "Testing..." : "Test connection"}
             </button>
+            {adding && (
+              <button className="btn" type="button" disabled={busy !== null} onClick={cancelAdding} data-testid="store-add-cancel">
+                Cancel
+              </button>
+            )}
             {saved?.source === "page" && (
               <button className="btn" type="button" disabled={busy !== null} onClick={remove} data-testid="shopify-remove">
                 Remove

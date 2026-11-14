@@ -1,0 +1,148 @@
+{
+  "sections": {
+    "fynk-classic-hero": {
+      "type": "fynk-classic-hero",
+      "settings": {
+        "add_to_cart_text": "Add to cart",
+        "check_1": "Carefully checked",
+        "check_2": "Securely packed",
+        "check_3": "Tracked delivery",
+        "delivery_line": "Estimated delivery: 5 to 8 days",
+        "shipping_line": "Ask us about shipping and returns",
+        "button_color": "#3f3f3f"
+      }
+    },
+    "fynk-classic-special": {
+      "type": "fynk-classic-special",
+      "settings": {
+        "tab_1": "Product detail",
+        "tab_2": "Shipping and return",
+        "kicker": "Why is it special?",
+        "ship_heading": "Shipping",
+        "ship_1": "Orders are packed with care and sent with tracking.",
+        "ship_2": "You will receive an update as soon as your parcel ships.",
+        "returns_heading": "Returns",
+        "returns_text": "If something is not right with your order, contact us and we will make it right."
+      }
+    },
+    "fynk-classic-stats": {
+      "type": "fynk-classic-stats",
+      "blocks": {
+        "stat_1": {
+          "type": "stat",
+          "settings": {
+            "value": "100%",
+            "label": "secure checkout"
+          }
+        },
+        "stat_2": {
+          "type": "stat",
+          "settings": {
+            "value": "24/7",
+            "label": "friendly support"
+          }
+        },
+        "stat_3": {
+          "type": "stat",
+          "settings": {
+            "value": "Tracked",
+            "label": "delivery to your door"
+          }
+        }
+      },
+      "block_order": [
+        "stat_1",
+        "stat_2",
+        "stat_3"
+      ],
+      "settings": {
+        "band_color": "#D6E6C6"
+      }
+    },
+    "fynk-classic-features": {
+      "type": "fynk-classic-features",
+      "settings": {
+        "kicker": "Top features"
+      }
+    },
+    "fynk-classic-steps": {
+      "type": "fynk-classic-steps",
+      "blocks": {
+        "step_1": {
+          "type": "step",
+          "settings": {
+            "title": "Choose your option",
+            "text": "Pick the size or style you like."
+          }
+        },
+        "step_2": {
+          "type": "step",
+          "settings": {
+            "title": "Place your order",
+            "text": "Secure checkout takes a minute."
+          }
+        },
+        "step_3": {
+          "type": "step",
+          "settings": {
+            "title": "Receive and enjoy",
+            "text": "We send it with tracking."
+          }
+        }
+      },
+      "block_order": [
+        "step_1",
+        "step_2",
+        "step_3"
+      ],
+      "settings": {
+        "label": "How it works",
+        "heading": "It's time to achieve more with less",
+        "body": "Three easy steps from your screen to your door."
+      }
+    },
+    "fynk-classic-faq": {
+      "type": "fynk-classic-faq",
+      "blocks": {
+        "faq_1": {
+          "type": "faq_item",
+          "settings": {
+            "question": "How long does shipping take?",
+            "answer": "Orders are sent with tracking. Delivery time depends on where you live, and you will see it at checkout."
+          }
+        },
+        "faq_2": {
+          "type": "faq_item",
+          "settings": {
+            "question": "What payment methods do you accept?",
+            "answer": "You can pay with the methods shown at checkout."
+          }
+        },
+        "faq_3": {
+          "type": "faq_item",
+          "settings": {
+            "question": "Can I return my order?",
+            "answer": "If something is not right, contact us and we will help."
+          }
+        }
+      },
+      "block_order": [
+        "faq_1",
+        "faq_2",
+        "faq_3"
+      ],
+      "settings": {
+        "label": "FAQs",
+        "heading": "Good to know"
+      }
+    }
+  },
+  "order": [
+    "fynk-classic-hero",
+    "fynk-classic-special",
+    "fynk-classic-stats",
+    "fynk-classic-features",
+    "fynk-classic-steps",
+    "fynk-classic-faq"
+  ]
+}

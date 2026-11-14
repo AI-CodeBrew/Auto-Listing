@@ -13,13 +13,19 @@ import httpx
 
 from .. import repo
 from ..sanitize import description_to_html
+from .. import settings
 from ..settings import shopify_credentials
 from ..storage import ensure_local, public_url
 from ..story import current_product_story, ensure_product_story
 from ..templates import find_template
 from .client import ShopifyError, graphql, missing_shopify_settings
 
-SAAMANO_TEMPLATE_SUFFIX = find_template("saamano")["templateSuffix"]
+
+
+def new_product_template_suffix() -> str:
+    """The page a new product gets: the one chosen for this store on the Template page (Bundle until one is chosen)."""
+    template = find_template(settings.default_template_id()) or find_template(settings.DEFAULT_TEMPLATE_ID)
+    return template["templateSuffix"]
 
 FIND_BY_HANDLE = """
   query FindDraftByHandle($identifier: ProductIdentifierInput!) {
@@ -212,7 +218,7 @@ def _page_text(product: dict, warnings: list[str]) -> dict | None:
     try:
         return ensure_product_story(product["id"], name, description)
     except Exception as error:  # noqa: BLE001
-        warnings.append(f"The Saamano page text (feature cards, Why Choose Us and FAQ) could not be written, so it was left out: {error}")
+        warnings.append(f"The Bundle page text (feature cards, Why Choose Us and FAQ) could not be written, so it was left out: {error}")
         return None
 
 
@@ -225,7 +231,9 @@ def build_product_input(*, product: dict, image_sources: list[dict], file_video_
     result: dict = {}
     if metafields:
         result["metafields"] = metafields
-    result["templateSuffix"] = SAAMANO_TEMPLATE_SUFFIX
+    if not update:
+        # An update never changes the page a product already has.
+        result["templateSuffix"] = new_product_template_suffix()
     if update and product.get("shopify_product_id"):
         result["id"] = product["shopify_product_id"]
     result["title"] = title
@@ -269,9 +277,13 @@ def start_send(product_id: str, update: bool = False) -> dict:
         return {"started": False, "reason": "Product not found", "status": 404}
     if product["stage"] != "listing":
         return {"started": False, "reason": "Only products in the Listing tab can be sent to Shopify.", "status": 409}
+    settings.pin_active_store()
     if update:
         if not product["shopify_product_id"]:
             return {"started": False, "reason": "This listing is not on Shopify yet.", "status": 409}
+        where = re.match(r"https?://([^/]+)/", product.get("shopify_admin_url") or "")
+        if where and where.group(1).lower() != shopify_credentials()["domain"]:
+            return {"started": False, "reason": f"This product is on {where.group(1)}. Switch to that store at the top right to update it.", "status": 409}
         if not repo.claim_for_update(product_id):
             return {"started": False, "reason": "This product is already being sent.", "status": 409}
         _in_background(product_id, _run_update)
