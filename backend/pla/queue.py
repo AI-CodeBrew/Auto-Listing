@@ -65,7 +65,7 @@ def _recover(shared: bool) -> None:
 
 
 def _loop() -> None:
-    from . import db
+    from . import db, metatoken
 
     shared = db.is_postgres()
     last_recover = time.monotonic()
@@ -76,6 +76,8 @@ def _loop() -> None:
             if shared and time.monotonic() - last_recover >= RECOVER_EVERY_S:
                 last_recover = time.monotonic()
                 _recover(shared)
+            # The Meta token lasts 60 days; this swaps it for a fresh one long before that (it checks rarely).
+            metatoken.renew_if_due()
             job = repo.claim_next_job()
             if job:
                 _run_one(job)

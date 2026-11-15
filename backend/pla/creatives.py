@@ -11,7 +11,7 @@ from urllib.parse import quote, urlencode
 
 import requests
 
-from . import config, db
+from . import config, db, metatoken
 from .ai import identify_product_image, match_product_thumbnails
 from .config import LIMITS
 from .jsurl import URL, URLError
@@ -261,7 +261,7 @@ def _is_graph_url(raw: str) -> bool:
 
 
 def search_meta_ads(keyword: str) -> list[dict]:
-    token = config.meta_access_token()
+    token = metatoken.current()
     if not token:
         raise CreativeError("META_ACCESS_TOKEN is missing. Add it to backend/.env and restart the app.", 500)
     params = urlencode({

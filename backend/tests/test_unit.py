@@ -655,3 +655,57 @@ def test_has_running_work_follows_jobs_and_sends():
     assert repo.has_running_work() is True  # a Shopify send
     repo.update_product(product_id, {"shopify_status": "draft"})
     assert repo.has_running_work() is False
+
+
+# ---------- Meta token renewal ----------
+
+def test_meta_token_is_renewed_before_it_expires(monkeypatch):
+    import time
+
+    from pla import db, metatoken
+
+    class Reply:
+        ok, text, status_code = True, "{}", 200
+
+        def __init__(self, body):
+            self.body = body
+
+        def json(self):
+            return self.body
+
+    asked = []
+
+    def fake_get(url, timeout, params):
+        asked.append(params["fb_exchange_token"])
+        return Reply({"access_token": f"fresh-{len(asked)}", "expires_in": 60 * 24 * 3600})
+
+    monkeypatch.setenv("META_ACCESS_TOKEN", "start-token")
+    monkeypatch.setenv("META_APP_ID", "1")
+    monkeypatch.setenv("META_APP_SECRET", "s")
+    monkeypatch.setattr(metatoken.requests, "get", fake_get)
+    db.execute("DELETE FROM settings WHERE key = ?", (metatoken.KEY,))
+
+    # A token we have not seen is swapped at once, and the fresh one is used from then on.
+    metatoken.renew_if_due(force=True)
+    assert asked == ["start-token"] and metatoken.current() == "fresh-1"
+
+    # With most of the 60 days left, nothing is asked of Meta.
+    metatoken.renew_if_due(force=True)
+    assert asked == ["start-token"]
+
+    # Under 30 days left: the saved token is swapped for the next one.
+    saved = metatoken._saved()
+    metatoken._save(saved["token"], time.time() + 10 * 24 * 3600)
+    metatoken.renew_if_due(force=True)
+    assert asked == ["start-token", "fresh-1"] and metatoken.current() == "fresh-2"
+
+    # Meta refusing keeps the token we have.
+    metatoken._save("fresh-2", time.time() + 3600)
+    monkeypatch.setattr(metatoken.requests, "get", lambda url, timeout, params: Reply({"error": {"code": 190}}))
+    metatoken.renew_if_due(force=True)
+    assert metatoken.current() == "fresh-2"
+
+    # A new token in .env takes over from the saved one.
+    monkeypatch.setenv("META_ACCESS_TOKEN", "replacement")
+    monkeypatch.setattr(metatoken, "_last_check", time.time())
+    assert metatoken.current() == "replacement"
