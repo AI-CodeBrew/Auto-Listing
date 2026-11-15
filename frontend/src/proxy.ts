@@ -17,6 +17,9 @@ function forwardedFromElsewhere(value: string | null): boolean {
 /** Pages anyone may open. Everything else needs a login. */
 const PUBLIC_PAGES = new Set(["/login", "/signup", "/admin/login"]);
 
+/** The privacy policy, terms and data deletion steps. Open to everyone, signed in or not. */
+const LEGAL_PAGES = new Set(["/privacy", "/terms", "/data-deletion"]);
+
 /**
  * Two jobs:
  * 1. When the app is reached through a public tunnel (for Google Lens), only the signed photo
@@ -47,6 +50,8 @@ export async function proxy(request: NextRequest) {
 
   const signedIn = request.cookies.has("pla_session");
   const role = request.cookies.get("pla_role")?.value;
+
+  if (LEGAL_PAGES.has(pathname)) return NextResponse.next();
 
   if (PUBLIC_PAGES.has(pathname)) {
     // Already signed in: go where that account belongs.

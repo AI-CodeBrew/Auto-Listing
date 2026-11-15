@@ -6,7 +6,7 @@ import { AdminTabs } from "./AdminTabs";
 import { usePolling } from "./api";
 import { Tabs, type Status } from "./Tabs";
 
-const BARE_PAGES = new Set(["/login", "/signup", "/admin/login"]);
+const BARE_PAGES = new Set(["/login", "/signup", "/admin/login", "/privacy", "/terms", "/data-deletion"]);
 
 /** The login pages have no sidebar. The admin portal has its own. */
 export function Shell({ children }: { children: React.ReactNode }) {
