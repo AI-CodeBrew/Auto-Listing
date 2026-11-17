@@ -1,7 +1,11 @@
 """Adds a product page template to the store's live theme. Only new "fynk-" files are written, so
-nothing already in the theme changes."""
+nothing already in the theme changes.
+
+An entire store design also takes over the live theme's home page, collection page and collection list
+(the files its template lists under "replaces"). It never replaces the store's product page."""
 from __future__ import annotations
 
+import json
 import re
 import threading
 import time
@@ -9,7 +13,7 @@ from datetime import datetime, timezone
 from urllib.parse import quote
 
 from ..settings import pin_active_store, save_template_push, shopify_credentials
-from ..templates import read_template_files
+from ..templates import read_store_content, read_template_files
 from .client import ShopifyError, graphql, missing_shopify_settings
 
 FILES_PER_UPLOAD = 50
@@ -33,6 +37,19 @@ UPSERT = """mutation UpsertThemeFiles($themeId: ID!, $files: [OnlineStoreThemeFi
     upsertedThemeFiles { filename }
     job { id }
     userErrors { filename code message }
+  }
+}"""
+THEME_HAS = """query ThemeHasFiles($id: ID!, $names: [String!]!) {
+  theme(id: $id) { files(filenames: $names, first: 10) { nodes { filename } } }
+}"""
+SHOP_FACTS = """query ShopFacts {
+  shop { id name }
+  collections(first: 6, sortKey: UPDATED_AT, reverse: true) { nodes { handle } }
+}"""
+SET_METAFIELD = """mutation SetShopMetafield($metafields: [MetafieldsSetInput!]!) {
+  metafieldsSet(metafields: $metafields) {
+    metafields { id }
+    userErrors { field message code }
   }
 }"""
 JOB = """query JobStatus($id: ID!) {
@@ -99,6 +116,8 @@ def push_theme_template(template: dict, on_progress=lambda step: None) -> dict:
         raise ShopifyError("A theme push is already running. Wait for it to finish.")
     try:
         pin_active_store()
+        if template.get("kind") == "store":
+            return _push_store(template, on_progress)
         return _push(template, on_progress)
     finally:
         _running.release()
@@ -157,6 +176,81 @@ def _push(template: dict, on_progress) -> dict:
     }
     save_template_push(template["id"], saved)
     return {**saved, "uploaded": len(files), "unchanged": 0, "removed": 0, "warnings": []}
+
+
+def _push_store(template: dict, on_progress) -> dict:
+    """Gives the live theme the store design. The sample text goes in first: if that fails, no theme file has changed."""
+    missing = missing_shopify_settings()
+    if missing:
+        raise ShopifyError(f"Connect Shopify first. Fill in on the Integrations page: {', '.join(missing)}.")
+    domain = shopify_credentials()["domain"]
+
+    on_progress("Checking the app's permissions...")
+    installed = graphql(SCOPES, {}, 30_000)
+    granted = {scope["handle"] for scope in installed["currentAppInstallation"]["accessScopes"]}
+    lacking = ([] if "write_themes" in granted else ["write_themes"]) + ([] if ("read_themes" in granted or "write_themes" in granted) else ["read_themes"])
+    if lacking:
+        plural = "s" if len(lacking) > 1 else ""
+        raise ShopifyError(f"The app is missing the {' and '.join(lacking)} permission{plural}, so it cannot add the store design to your theme. {_scope_help()} Nothing in your store was changed.")
+
+    on_progress("Finding your live theme...")
+    nodes = graphql(LIVE_THEME, {}, 30_000)["themes"]["nodes"]
+    if not nodes:
+        raise ShopifyError("This store has no live theme. Publish a theme in Online Store → Themes, then push again.")
+    live = nodes[0]
+
+    on_progress(f"Reading the {template['name']} files...")
+    files = read_template_files(template["id"])
+    replaces = set(template.get("replaces", []))
+    foreign = [f for f in files if not OWN_FILE.search(f["filename"]) and f["filename"] not in replaces]
+    if foreign:
+        raise ShopifyError(f"These files could replace the store's own and were not sent: {', '.join(f['filename'] for f in foreign)}.")
+
+    # The store keeps the product page it has. The design's product page stays an extra page to choose in the editor.
+    has_product = graphql(THEME_HAS, {"id": live["id"], "names": ["templates/product.json", "templates/product.liquid"]}, 30_000)["theme"]["files"]["nodes"]
+    suffix_page = f"templates/product.{template['templateSuffix']}.json"
+    if not has_product:
+        own = next(f for f in files if f["filename"] == suffix_page)
+        files = files + [{**own, "filename": "templates/product.json"}]
+
+    on_progress("Saving the store text and pictures...")
+    facts = graphql(SHOP_FACTS, {}, 30_000)
+    content = read_store_content(template["id"])
+    text = content["home_page"]["text"]
+    text["store_name"] = facts["shop"]["name"] or text.get("store_name", "")
+    handles = [c["handle"] for c in facts["collections"]["nodes"]] or ["all"]
+    for index in range(1, 7):
+        text[f"collection_{index}"] = handles[(index - 1) % len(handles)]
+    saved_field = graphql(SET_METAFIELD, {"metafields": [{
+        "ownerId": facts["shop"]["id"],
+        "namespace": "fynk",
+        "key": "store_generation",
+        "type": "json",
+        "value": json.dumps(content, ensure_ascii=False),
+    }]}, 60_000)["metafieldsSet"]
+    if saved_field.get("userErrors"):
+        raise ShopifyError(f"Shopify would not save the store text: {'; '.join(e['message'] for e in saved_field['userErrors'])}. Nothing in your theme was changed.")
+
+    on_progress(f'Adding {len(files)} files to your live theme "{live["name"]}"...')
+    failed, jobs = _upload_all(live["id"], files, on_progress)
+    if failed:
+        raise ShopifyError(f"Shopify refused {', '.join(f'{name} ({msg})' for name, msg in failed.items())}. Push again, or check Online Store → Themes in your Shopify admin.")
+    if jobs:
+        on_progress("Waiting for Shopify to save the files...")
+        _wait_for_jobs(jobs)
+
+    saved = {
+        "domain": domain,
+        "themeId": live["id"],
+        "themeName": live["name"],
+        "previewUrl": f"https://{domain}/",
+        "productPreviewUrl": None,
+        "editorUrl": f"https://{domain}/admin/themes/{_numeric_id(live['id'])}/editor",
+        "at": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+    }
+    save_template_push(template["id"], saved)
+    warnings = [] if has_product else ["Your theme had no product page, so the design's product page was added as your product page."]
+    return {**saved, "uploaded": len(files), "unchanged": 0, "removed": 0, "warnings": warnings}
 
 
 def _upload_all(theme_id: str, files: list[dict], on_progress) -> tuple[dict, list[str]]:

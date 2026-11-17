@@ -65,6 +65,7 @@ function ListingCard({ live, others, onChange }: { live: Product; others: Produc
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [cost, setCost] = useState("");
+  const [vendor, setVendor] = useState("");
   const [images, setImages] = useState<ProductImage[]>([]);
   const [videos, setVideos] = useState<ProductVideo[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -89,6 +90,7 @@ function ListingCard({ live, others, onChange }: { live: Product; others: Produc
         setDescription(body.product.description ?? "");
         setPrice(body.product.price ?? "");
         setCost(body.product.cost ?? "");
+        setVendor(body.product.vendor ?? "");
         setImages(body.images.filter((image) => image.selected));
         setVideos(body.videos.filter((video) => video.selected));
         setLoaded(true);
@@ -110,7 +112,7 @@ function ListingCard({ live, others, onChange }: { live: Product; others: Produc
     try {
       await api(`/api/products/${id}`, {
         method: "PATCH",
-        json: { name, sku, category, description, price, cost, imageIds: images.map((image) => image.id), videoIds: videos.map((video) => video.id) },
+        json: { name, sku, category, description, price, cost, vendor, imageIds: images.map((image) => image.id), videoIds: videos.map((video) => video.id) },
       });
       setDirty(false);
       setError(null);
@@ -183,6 +185,10 @@ function ListingCard({ live, others, onChange }: { live: Product; others: Produc
           <label className="field">
             <span>Cost price</span>
             <input type="text" inputMode="decimal" value={cost} onChange={(e) => edit(setCost)(e.target.value)} placeholder="0.00" data-testid="listing-cost" />
+          </label>
+          <label className="field">
+            <span>Vendor</span>
+            <input type="text" maxLength={255} value={vendor} onChange={(e) => edit(setVendor)(e.target.value)} placeholder="Your brand name" data-testid="listing-vendor" />
           </label>
         </div>
         <label className="field">

@@ -1,0 +1,45 @@
+{%- assign store_gen = shop.metafields.fynk.store_generation.value -%}
+{%- assign ht = store_gen.home_page.text -%}
+{%- assign homeData = section.settings.homeData -%}
+{%- if ht == blank and homeData.text != blank -%}{%- assign ht = homeData.text -%}{%- endif -%}
+{%- assign related = homeData.demo_products | default: product.collections.first.products | default: collections.all.products -%}
+{%- capture cards -%}
+  {%- assign shown = 0 -%}
+  {%- for item in related limit: 9 -%}
+    {%- if item.handle != product.handle and shown < 8 -%}
+      {%- assign shown = shown | plus: 1 -%}
+      {%- render 'fynk-simmer-card', product: item, quick_add_label: ht.label_quick_add -%}
+    {%- endif -%}
+  {%- endfor -%}
+{%- endcapture -%}
+{%- capture sm_html -%}
+{%- if shown > 0 -%}
+<section class="sm-pr" data-sm-rail>
+  <div class="sm-wrap">
+    <h2 class="sm-pr__title">{{ ht.label_related | default: 'Product Related' }}</h2>
+    <div class="sm-rail__track" data-sm-track>{{ cards }}</div>
+    <div class="sm-dots sm-pr__dots" data-sm-rail-dots></div>
+  </div>
+</section>
+{%- endif -%}
+<style>
+  .sm .sm-pr { padding-block: 66px 120px; background: #fff; }
+  .sm .sm-pr__title { margin-bottom: 30px; font-size: 19.2px; line-height: 28.8px; font-weight: 500 !important; text-align: center; text-transform: uppercase; color: #222; }
+  .sm .sm-pr .sm-rail__track { --sm-gap: 30px; --sm-col: calc((100% - 90px) / 4); justify-content: safe center; }
+  .sm .sm-pr__dots { justify-content: center; margin-top: 44px; color: var(--sm-ink); }
+  @media (max-width: 1024px) {
+    .sm .sm-pr .sm-rail__track { --sm-gap: 10px; --sm-col: calc((100% - 10px) / 2); }
+    .sm .sm-pr { padding-block: 50px 70px; }
+  }
+</style>
+{%- endcapture -%}
+{%- render 'fynk-simmer-wrap', html: sm_html -%}
+
+{% schema %}
+{
+  "name": "Simmer Related Products",
+  "tag": "section",
+  "settings": [],
+  "presets": [{ "name": "Simmer Related Products" }]
+}
+{% endschema %}

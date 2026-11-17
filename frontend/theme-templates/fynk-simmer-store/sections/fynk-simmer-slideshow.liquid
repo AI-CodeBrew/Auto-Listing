@@ -1,0 +1,129 @@
+{%- assign store_gen = shop.metafields.fynk.store_generation.value -%}
+{%- assign ht = store_gen.home_page.text -%}
+{%- assign hi = store_gen.home_page.images -%}
+{%- assign homeData = section.settings.homeData -%}
+{%- if ht == blank and homeData.text != blank -%}{%- assign ht = homeData.text -%}{%- endif -%}
+{%- if hi == blank and homeData.images != blank -%}{%- assign hi = homeData.images -%}{%- endif -%}
+{%- assign url = routes.all_products_collection_url | default: '/collections/all' -%}
+{%- assign side_url = url -%}
+{%- if ht.collection_1 != blank -%}{%- assign side_url = '/collections/' | append: ht.collection_1 -%}{%- endif -%}
+{%- capture sm_html -%}
+<section class="sm-hero">
+  <div class="sm-fluid sm-hero__grid">
+    <div class="sm-hero__main" data-sm-slides="7000" aria-roledescription="carousel">
+      {%- for i in (1..3) -%}
+        {%- assign kicker_key = 'hero_kicker_' | append: i -%}
+        {%- assign heading_key = 'banner_heading_' | append: i -%}
+        {%- assign text_key = 'banner_text_' | append: i -%}
+        {%- assign image_key = 'banner_image_' | append: i -%}
+        {%- if ht[heading_key] != blank -%}
+          <div class="sm-hero__slide{% if i == 1 %} is-first{% endif %}" data-sm-slide>
+            <a class="sm-hero__media" href="{{ url }}" tabindex="-1" aria-hidden="true">{%- render 'fynk-simmer-img', src: hi[image_key], alt: ht[heading_key], width: 1600 -%}</a>
+            <div class="sm-hero__copy">
+              {%- if ht[kicker_key] != blank -%}<p class="sm-hero__kick">{{ ht[kicker_key] }}</p>{%- endif -%}
+              <h2 class="sm-hero__title">{{ ht[heading_key] }}</h2>
+              {%- if ht[text_key] != blank -%}<p class="sm-hero__text">{{ ht[text_key] }}</p>{%- endif -%}
+              <a class="sm-btn sm-hero__cta" href="{{ url }}">{% render 'fynk-simmer-ui-string', key: 'shop_now' %}<span class="sm-tilt">{%- render 'fynk-simmer-icon', name: 'arrow', size: 14 -%}</span></a>
+            </div>
+          </div>
+        {%- endif -%}
+      {%- endfor -%}
+      <div class="sm-hero__dots">
+        {%- for i in (1..3) -%}
+          {%- assign heading_key = 'banner_heading_' | append: i -%}
+          {%- if ht[heading_key] != blank -%}<button type="button" data-sm-dot aria-label="Slide {{ i }}">{{ i }}</button>{%- endif -%}
+        {%- endfor -%}
+      </div>
+    </div>
+    {%- if ht.hero_side_heading != blank -%}
+      <div class="sm-hero__side">
+        {%- render 'fynk-simmer-img', src: hi.hero_side_image, alt: ht.hero_side_heading, width: 800 -%}
+        <div class="sm-hero__sidecopy">
+          <h2 class="sm-hero__sidetitle">{{ ht.hero_side_heading }}</h2>
+          <a class="sm-go sm-hero__sidego" href="{{ side_url }}">{{ ht.label_learn_more | default: 'Learn more' }}{%- render 'fynk-simmer-icon', name: 'arrow', size: 14 -%}</a>
+        </div>
+      </div>
+    {%- endif -%}
+  </div>
+</section>
+<style>
+  @keyframes sm-hero-settle { from { transform: scale(1.25); } to { transform: scale(1); } }
+  .sm .sm-hero { padding-block-end: 10px; background: #fff; }
+  .sm .sm-hero__grid { display: grid; grid-template-columns: calc(25% - 7.5px) calc(75% - 2.5px); grid-template-areas: "side main"; gap: 10px; }
+  .sm .sm-hero__grid:not(:has(.sm-hero__side)) { grid-template-columns: 1fr; grid-template-areas: "main"; }
+  .sm .sm-hero__main { grid-area: main; position: relative; display: grid; aspect-ratio: 1000 / 601.5; overflow: hidden; border-radius: 5px; background: #2a2622; color: #fff; transform: translateZ(0); }
+  .sm .sm-hero__slide { position: relative; grid-area: 1 / 1; display: flex; align-items: center; opacity: 0; visibility: hidden; transition: opacity .5s ease, visibility .5s; }
+  .sm .sm-hero__slide.is-on { opacity: 1; visibility: visible; z-index: 1; }
+  .sm .sm-hero__media { position: absolute; inset: 0; overflow: hidden; }
+  .sm .sm-hero__media img { width: 100%; height: 100%; object-fit: cover; transform: scale(1); transition: transform 0s linear .6s; }
+  .sm .sm-hero__slide.is-on .sm-hero__media img { transform: scale(1.1); transition: transform 7s linear; }
+  .sm .sm-hero__slide.is-first.is-on .sm-hero__media img { transform: scale(1); animation: sm-hero-settle 1.5s ease-out; }
+  .sm .sm-hero__media::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgb(15 12 10 / .28), rgb(15 12 10 / 0) 62%); }
+  .sm[dir="rtl"] .sm-hero__media::after { transform: scaleX(-1); }
+  .sm .sm-hero__copy { position: relative; z-index: 1; width: min(100%, 640px); padding-inline-start: 4%; pointer-events: none; }
+  .sm .sm-hero__copy a { pointer-events: auto; }
+  .sm .sm-hero__kick { margin-bottom: 15px; font-size: 13px; line-height: 1.4; font-weight: 500; text-transform: uppercase; color: #fff; }
+  .sm .sm-hero__title { margin-bottom: 15px; font-size: 30px; line-height: 1.5; font-weight: 500 !important; text-transform: capitalize; color: #fff; }
+  .sm .sm-hero__text { max-width: 470px; margin-bottom: 30px; font-size: 13px; line-height: 1.5; color: #fff; }
+  .sm .sm-hero__cta { min-width: 180px; height: 60px; background: #f0f0f0; border-color: #f0f0f0; color: var(--sm-ink); }
+  .sm .sm-hero__cta span:first-child { font-size: inherit; }
+  .sm .sm-hero__slide:not(.is-on) :is(.sm-hero__kick, .sm-hero__title, .sm-hero__text, .sm-hero__cta) { opacity: 0; }
+  .sm .sm-hero__slide.is-on .sm-hero__kick { animation: sm-left 1s ease both; }
+  .sm .sm-hero__slide.is-on .sm-hero__title { animation: sm-right 1s ease both; }
+  .sm .sm-hero__slide.is-on :is(.sm-hero__text, .sm-hero__cta) { animation: sm-up 1s ease both; }
+  .sm .sm-hero__dots { position: absolute; bottom: 25px; inset-inline-start: 4%; z-index: 3; display: flex; gap: 15px; }
+  .sm .sm-hero__dots button { width: 8px; height: 8px; padding: 0; border: 1px solid #fff; border-radius: 50px; background: transparent; font-size: 0; cursor: pointer; transition: .3s; }
+  .sm .sm-hero__dots button.is-on, .sm .sm-hero__dots button:hover { background: #fff; }
+  .sm .sm-hero__side { grid-area: side; position: relative; min-height: 0; overflow: hidden; border-radius: 5px; background: #2a2622; }
+  .sm .sm-hero__side > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .sm .sm-hero__sidecopy { position: absolute; inset-inline: 0; bottom: 30px; z-index: 1; text-align: center; }
+  .sm .sm-hero__sidetitle { margin-bottom: 4.8px; font-size: 28.8px; line-height: 43.2px; font-weight: 500 !important; color: #fff; }
+  .sm .sm-hero__sidego { font-weight: 500; text-transform: none; color: #fff; }
+  .sm .sm-hero__sidego:hover { color: var(--sm-accent); }
+  @media (min-width: 1500px) {
+    .sm .sm-hero__kick { font-size: 16px; }
+    .sm .sm-hero__title { font-size: 40px; }
+    .sm .sm-hero__text { font-size: 16px; max-width: 580px; }
+  }
+  @media (max-width: 1199px) {
+    .sm .sm-hero { padding-block-start: 30px; }
+    .sm .sm-hero__sidetitle { padding-inline: 10px; font-size: 24px; line-height: 34px; }
+    .sm .sm-hero__kick { margin-bottom: 10px; font-size: 12px; }
+    .sm .sm-hero__title { font-size: 26px; }
+    .sm .sm-hero__text { font-size: 14px; }
+    .sm .sm-hero__cta { min-width: 126px; height: 43px; }
+  }
+  @media (max-width: 991px) {
+    .sm .sm-hero__title { margin-bottom: 10px; font-size: 24px; }
+    .sm .sm-hero__text { margin-bottom: 20px; font-size: 11px; }
+  }
+  @media (max-width: 767px) {
+    .sm .sm-hero { padding-block-start: 0; }
+    .sm .sm-hero__grid { grid-template-columns: 1fr; grid-template-areas: "main" "side"; }
+    .sm .sm-hero__main { aspect-ratio: auto; min-height: 320px; }
+    .sm .sm-hero__slide { align-items: flex-start; }
+    .sm .sm-hero__copy { width: 90%; padding: 9% 0 0 4%; }
+    .sm[dir="rtl"] .sm-hero__copy { padding: 9% 4% 0 0; }
+    .sm .sm-hero__media::after { background: linear-gradient(90deg, rgb(15 12 10 / .5), rgb(15 12 10 / .08)); }
+    .sm .sm-hero__kick { font-size: 10px; }
+    .sm .sm-hero__title { font-size: 19px; }
+    .sm .sm-hero__text { font-size: 9px; }
+    .sm .sm-hero__side { aspect-ratio: 375 / 690; }
+  }
+  @media (min-width: 576px) and (max-width: 767px) {
+    .sm .sm-hero__kick { font-size: 10px; }
+    .sm .sm-hero__title { font-size: 20px; }
+    .sm .sm-hero__text { font-size: 10px; }
+  }
+</style>
+{%- endcapture -%}
+{%- render 'fynk-simmer-wrap', html: sm_html -%}
+
+{% schema %}
+{
+  "name": "Simmer Slideshow",
+  "tag": "section",
+  "settings": [],
+  "presets": [{ "name": "Simmer Slideshow" }]
+}
+{% endschema %}

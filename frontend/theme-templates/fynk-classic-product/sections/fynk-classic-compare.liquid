@@ -1,0 +1,101 @@
+{%- comment -%}
+  FynkTech Classic product page: "Why Choose Us?". Text and a button on the left, a table on the right
+  with the product's photo in a colored column against "Others". The text and the rows come from the
+  product's own "saamano.compare_intro" and "saamano.compare" metafields, written by the FynkTech app.
+  The section is hidden when a product has no comparison rows.
+{%- endcomment -%}
+{%- capture au_html -%}
+{%- liquid
+  assign p = product
+  assign mf = p.metafields.saamano
+  assign rows = mf.compare.value
+  assign intro = mf.compare_intro.value
+-%}
+{%- if rows.size > 0 -%}
+<section class="au-cmp" style="--au-cmp-band: {{ section.settings.band_color }}; --au-cmp-ink: {{ section.settings.text_color }}; --au-cmp-accent: {{ section.settings.accent_color }};">
+  <div class="au-cmp__grid">
+    <div class="au-cmp__copy">
+      <h2>{{ section.settings.title | escape }}</h2>
+      {%- if intro != blank -%}<p>{{ intro | escape | newline_to_br }}</p>{%- endif -%}
+      <button type="button" class="au-cmp__btn" data-au-shop>{{ section.settings.button_label | escape }}</button>
+    </div>
+    <table class="au-cmp__table">
+      <thead>
+        <tr>
+          <th scope="col">{{ section.settings.features_label | escape }}</th>
+          <th scope="col" class="au-cmp__us">
+            {%- if p.featured_image -%}
+              {{ p.featured_image | image_url: width: 200 | image_tag: loading: 'lazy', alt: p.title }}
+            {%- else -%}
+              Ours
+            {%- endif -%}
+          </th>
+          <th scope="col">{{ section.settings.others_label | escape }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {%- for row in rows limit: 6 -%}
+          <tr>
+            <th scope="row">{{ row | strip | escape }}</th>
+            <td class="au-cmp__us"><span class="au-cmp__yes" aria-label="Yes">&#10003;</span></td>
+            <td><span class="au-cmp__no" aria-label="No">&#10005;</span></td>
+          </tr>
+        {%- endfor -%}
+      </tbody>
+    </table>
+  </div>
+</section>
+<style>
+  .au-cmp { background: var(--au-cmp-band); color: var(--au-cmp-ink); font-family: "DM Sans", system-ui, sans-serif; padding: 72px 0; }
+  .au-cmp__grid { width: min(1180px, calc(100% - 48px)); margin: 0 auto; display: grid; gap: 28px; align-items: center; min-width: 0; }
+  @media (min-width: 990px) { .au-cmp__grid { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 56px; } }
+  .au-cmp__copy h2 { margin: 0 0 14px; font-size: clamp(30px, 3.6vw, 44px); line-height: 1.1; letter-spacing: -0.02em; font-weight: 800; }
+  .au-cmp__copy p { margin: 0 0 24px; max-width: 46ch; color: var(--au-cmp-ink); opacity: 0.72; font-size: 16px; line-height: 1.55; }
+  .au-cmp__btn { display: inline-flex; padding: 13px 26px; border: 0; border-radius: 10px; background: var(--au-cmp-accent); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+  .au-cmp__table { width: 100%; border-collapse: separate; border-spacing: 0; background: #fff; border: 1px solid var(--au-cmp-ink); border-radius: 14px; overflow: hidden; table-layout: fixed; }
+  .au-cmp__table th, .au-cmp__table td { padding: 18px 20px; border-bottom: 1px solid var(--au-cmp-ink); text-align: center; font-weight: 400; }
+  .au-cmp__table tr:last-child th, .au-cmp__table tr:last-child td { border-bottom: 0; }
+  .au-cmp__table thead th { background: rgb(255 255 255 / 0.55); font-size: 15px; }
+  .au-cmp__table th[scope="row"], .au-cmp__table thead th:first-child { text-align: start; width: 48%; font-size: 15px; }
+  .au-cmp__table .au-cmp__us { background: var(--au-cmp-accent); color: #fff; border-inline-start: 1px solid var(--au-cmp-ink); border-inline-end: 1px solid var(--au-cmp-ink); }
+  .au-cmp__table thead .au-cmp__us img { width: 88px; height: 88px; object-fit: cover; border-radius: 12px; display: block; margin: 0 auto; background: #fff; }
+  .au-cmp__yes, .au-cmp__no { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; font-size: 16px; }
+  .au-cmp__yes { background: #eaf5ee; color: #2f7e78; font-weight: 900; }
+  .au-cmp__no { background: #f6e3e0; color: #b8462f; }
+  @media (max-width: 989px) { .au-cmp { padding: 48px 0; } .au-cmp__table th, .au-cmp__table td { padding: 12px 10px; } .au-cmp__table thead .au-cmp__us img { width: 56px; height: 56px; } }
+</style>
+<script>
+  (function () {
+    document.querySelectorAll("[data-au-shop]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var buy = document.querySelector(".au-hero");
+        if (buy) buy.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+  })();
+</script>
+{%- endif -%}
+{%- endcapture -%}
+{%- if au_html contains 'ا' or au_html contains 'ل' or au_html contains 'ي' or au_html contains 'ة' -%}
+<div class="au-rtl" dir="rtl" style="display: contents">{{ au_html }}</div>
+{%- else -%}
+{{ au_html }}
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Classic - Why choose us",
+  "tag": "section",
+  "class": "fynk-classic-section",
+  "settings": [
+    { "type": "text", "id": "title", "label": "Heading", "default": "Why Choose Us?" },
+    { "type": "text", "id": "button_label", "label": "Button", "default": "Shop now" },
+    { "type": "text", "id": "features_label", "label": "First column", "default": "Features" },
+    { "type": "text", "id": "others_label", "label": "Last column", "default": "Others" },
+    { "type": "color", "id": "band_color", "label": "Background color", "default": "#f3f1ec" },
+    { "type": "color", "id": "text_color", "label": "Text and lines color", "default": "#1b2540" },
+    { "type": "color", "id": "accent_color", "label": "Our column and button color", "default": "#c8563e" }
+  ],
+  "presets": [{ "name": "Classic - Why choose us" }]
+}
+{% endschema %}

@@ -1,0 +1,78 @@
+{
+  "sections": {
+    "simmer-header": {
+      "type": "fynk-simmer-header",
+      "settings": {}
+    },
+    "simmer-slideshow": {
+      "type": "fynk-simmer-slideshow",
+      "settings": {}
+    },
+    "simmer-countdown": {
+      "type": "fynk-simmer-countdown",
+      "settings": {}
+    },
+    "simmer-line": {
+      "type": "fynk-simmer-line",
+      "settings": {}
+    },
+    "simmer-picks": {
+      "type": "fynk-simmer-picks",
+      "settings": {}
+    },
+    "simmer-line-2": {
+      "type": "fynk-simmer-line",
+      "settings": {
+        "space_above": false
+      }
+    },
+    "simmer-arrivals": {
+      "type": "fynk-simmer-arrivals",
+      "settings": {}
+    },
+    "simmer-brands": {
+      "type": "fynk-simmer-brands",
+      "settings": {}
+    },
+    "simmer-gallery": {
+      "type": "fynk-simmer-gallery",
+      "settings": {}
+    },
+    "simmer-testimonials": {
+      "type": "fynk-simmer-testimonials",
+      "settings": {}
+    },
+    "simmer-lookbook": {
+      "type": "fynk-simmer-lookbook",
+      "settings": {}
+    },
+    "simmer-faq": {
+      "type": "fynk-simmer-faq",
+      "settings": {}
+    },
+    "simmer-policy": {
+      "type": "fynk-simmer-policy",
+      "settings": {}
+    },
+    "simmer-footer": {
+      "type": "fynk-simmer-footer",
+      "settings": {}
+    }
+  },
+  "order": [
+    "simmer-header",
+    "simmer-slideshow",
+    "simmer-countdown",
+    "simmer-line",
+    "simmer-picks",
+    "simmer-line-2",
+    "simmer-arrivals",
+    "simmer-brands",
+    "simmer-gallery",
+    "simmer-testimonials",
+    "simmer-lookbook",
+    "simmer-faq",
+    "simmer-policy",
+    "simmer-footer"
+  ]
+}

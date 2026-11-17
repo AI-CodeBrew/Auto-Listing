@@ -1,0 +1,118 @@
+{%- assign store_gen = shop.metafields.fynk.store_generation.value -%}
+{%- assign ht = store_gen.home_page.text -%}
+{%- assign hi = store_gen.home_page.images -%}
+{%- assign homeData = section.settings.homeData -%}
+{%- if ht == blank and homeData.text != blank -%}{%- assign ht = homeData.text -%}{%- endif -%}
+{%- if hi == blank and homeData.images != blank -%}{%- assign hi = homeData.images -%}{%- endif -%}
+{%- assign all_url = routes.all_products_collection_url | default: '/collections/all' -%}
+{%- comment -%} Rows 4 to 6 reuse the pictures of rows 1 to 3 with the sides swapped, so three products fill six rows. {%- endcomment -%}
+{%- capture start_pics -%}
+  {%- for i in (1..6) -%}
+    {%- assign title_key = 'picks_title_' | append: i -%}
+    {%- if ht[title_key] != blank -%}
+      {%- assign pic_key = 'picks_left_' | append: i -%}
+      {%- assign pic = hi[pic_key] -%}
+      {%- if pic == blank and i > 3 -%}{%- assign back = i | minus: 3 -%}{%- assign back_key = 'picks_right_' | append: back -%}{%- assign pic = hi[back_key] -%}{%- endif -%}
+      {%- assign handle_key = 'collection_' | append: i -%}
+      {%- assign tile_url = all_url -%}
+      {%- if ht[handle_key] != blank -%}{%- assign tile_url = '/collections/' | append: ht[handle_key] -%}{%- endif -%}
+      <a class="sm-picks__pic" href="{{ tile_url }}" tabindex="-1" data-sm-pick-pic>{%- render 'fynk-simmer-img', src: pic, alt: ht[title_key], width: 900, lazy: true -%}</a>
+    {%- endif -%}
+  {%- endfor -%}
+{%- endcapture -%}
+{%- capture end_pics -%}
+  {%- for i in (1..6) -%}
+    {%- assign title_key = 'picks_title_' | append: i -%}
+    {%- if ht[title_key] != blank -%}
+      {%- assign pic_key = 'picks_right_' | append: i -%}
+      {%- assign pic = hi[pic_key] -%}
+      {%- if pic == blank and i > 3 -%}{%- assign back = i | minus: 3 -%}{%- assign back_key = 'picks_left_' | append: back -%}{%- assign pic = hi[back_key] -%}{%- endif -%}
+      {%- assign handle_key = 'collection_' | append: i -%}
+      {%- assign tile_url = all_url -%}
+      {%- if ht[handle_key] != blank -%}{%- assign tile_url = '/collections/' | append: ht[handle_key] -%}{%- endif -%}
+      <a class="sm-picks__pic" href="{{ tile_url }}" tabindex="-1" data-sm-pick-pic>{%- render 'fynk-simmer-img', src: pic, alt: ht[title_key], width: 900, lazy: true -%}</a>
+    {%- endif -%}
+  {%- endfor -%}
+{%- endcapture -%}
+{%- capture sm_html -%}
+{%- if ht.picks_title_1 != blank -%}
+<section class="sm-picks" data-sm-picks>
+  <div class="sm-fluid sm-picks__grid">
+    <div class="sm-picks__pics sm-picks__pics--start" data-sm-pick-stack>{{ start_pics }}</div>
+    <div class="sm-picks__body">
+      <div class="sm-picks__box">
+        <div class="sm-picks__head">
+          {%- if ht.picks_kicker != blank -%}<p class="sm-kick">{{ ht.picks_kicker }}</p>{%- endif -%}
+          <h2 class="sm-picks__title">{{ ht.picks_heading }}</h2>
+        </div>
+        <div class="sm-picks__list">
+          {%- for i in (1..6) -%}
+            {%- assign title_key = 'picks_title_' | append: i -%}
+            {%- assign text_key = 'picks_text_' | append: i -%}
+            {%- if ht[title_key] != blank -%}
+              <div class="sm-picks__item" data-sm-pick>
+                <h3 class="sm-picks__h"><button class="sm-picks__name" type="button" aria-expanded="false">{{ ht[title_key] }}</button></h3>
+                <div class="sm-picks__fold"><div><p class="sm-picks__text">{{ ht[text_key] }}</p></div></div>
+              </div>
+            {%- endif -%}
+          {%- endfor -%}
+        </div>
+      </div>
+    </div>
+    <div class="sm-picks__pics sm-picks__pics--end" data-sm-pick-stack>{{ end_pics }}</div>
+  </div>
+</section>
+{%- endif -%}
+<style>
+  .sm .sm-picks { padding-block-end: 120px; background: #fff; }
+  .sm .sm-picks__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: center; }
+  .sm .sm-picks__pics { position: relative; aspect-ratio: 445.33 / 601.5; overflow: hidden; background: var(--sm-tile); }
+  .sm .sm-picks__pic { position: absolute; inset: 0; display: block; opacity: 0; visibility: hidden; transition: opacity .5s ease, visibility .5s, transform .5s ease-in-out; }
+  .sm .sm-picks__pics--start .sm-picks__pic { transform: translateX(-30%); }
+  .sm .sm-picks__pics--end .sm-picks__pic { transform: translateX(30%); }
+  .sm[dir="rtl"] .sm-picks__pics--start .sm-picks__pic { transform: translateX(30%); }
+  .sm[dir="rtl"] .sm-picks__pics--end .sm-picks__pic { transform: translateX(-30%); }
+  .sm .sm-picks .sm-picks__pic.is-on { z-index: 1; opacity: 1; visibility: visible; transform: none; }
+  .sm .sm-picks__pic img { width: 100%; height: 100%; object-fit: cover; }
+  .sm .sm-picks__body { display: flex; justify-content: center; padding: 9.6px 43.2px; }
+  .sm .sm-picks__box { width: 100%; }
+  .sm .sm-picks__head { margin-bottom: 28.8px; text-align: center; }
+  .sm .sm-picks__head .sm-kick { margin-bottom: 15px; }
+  .sm .sm-picks__title { font-size: 40px; line-height: 60px; font-weight: 500 !important; color: var(--sm-ink); }
+  .sm .sm-picks__list { text-align: center; }
+  .sm .sm-picks__item:not(:last-child) { margin-bottom: 24px; }
+  .sm .sm-picks__h { font-size: inherit; }
+  .sm .sm-picks__name { display: block; width: 100%; padding: 0; border: 0; background: none; font-size: 19.2px; line-height: 28.8px; font-weight: 500; text-align: center; color: #a9a9a9; cursor: pointer; transition: color .3s; }
+  .sm .sm-picks__name:hover, .sm .sm-picks__item.is-on .sm-picks__name { color: var(--sm-ink); }
+  .sm .sm-picks__fold { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .4s ease; }
+  .sm .sm-picks__item.is-on .sm-picks__fold { grid-template-rows: 1fr; }
+  .sm .sm-picks__fold > div { min-height: 0; overflow: hidden; }
+  .sm .sm-picks__text { padding-top: 10px; font-size: 13.44px; line-height: 20.16px; color: var(--sm-text); }
+  @media (max-width: 1366px) {
+    .sm .sm-picks__body { padding-inline: 38.4px; }
+    .sm .sm-picks__title { font-size: 23.04px; line-height: 34.56px; }
+  }
+  @media (max-width: 1199px) { .sm .sm-picks { padding-block-end: 100px; } .sm .sm-picks__body { padding-inline: 20px; } }
+  @media (max-width: 991px) {
+    .sm .sm-picks { padding-block-end: 80px; }
+    .sm .sm-picks__grid { grid-template-columns: 1fr; }
+    .sm .sm-picks__pics--start { margin-bottom: 50px; }
+    .sm .sm-picks__pics--end { margin-top: 50px; }
+    .sm .sm-picks__body { padding: 0 15px; }
+  }
+  @media (max-width: 767px) {
+    .sm .sm-picks { padding-block-end: 60px; }
+    .sm .sm-picks__name { font-size: 17.28px; line-height: 25.92px; }
+  }
+</style>
+{%- endcapture -%}
+{%- render 'fynk-simmer-wrap', html: sm_html -%}
+
+{% schema %}
+{
+  "name": "Simmer Category Picks",
+  "tag": "section",
+  "settings": [],
+  "presets": [{ "name": "Simmer Category Picks" }]
+}
+{% endschema %}

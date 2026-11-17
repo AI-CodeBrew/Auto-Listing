@@ -1,0 +1,25 @@
+{%- capture sm_html -%}
+<div class="sm-divider{% if section.settings.space_above == false %} sm-divider--tight{% endif %}">
+  <div class="sm-fluid" data-sm-reveal><hr class="sm-rule sm-divider__rule"></div>
+</div>
+<style>
+  .sm .sm-divider { padding-block: 120px; background: #fff; }
+  .sm .sm-divider--tight { padding-block-start: 0; }
+  .sm .sm-divider__rule { width: 100%; max-width: none; background: var(--sm-rule); }
+  @media (max-width: 1199px) { .sm .sm-divider { padding-block: 100px; } .sm .sm-divider--tight { padding-block-start: 0; } }
+  @media (max-width: 991px) { .sm .sm-divider { padding-block: 80px; } .sm .sm-divider--tight { padding-block-start: 0; } }
+  @media (max-width: 767px) { .sm .sm-divider { padding-block: 60px; } .sm .sm-divider--tight { padding-block-start: 0; } }
+</style>
+{%- endcapture -%}
+{%- render 'fynk-simmer-wrap', html: sm_html -%}
+
+{% schema %}
+{
+  "name": "Simmer Divider",
+  "tag": "section",
+  "settings": [
+    { "type": "checkbox", "id": "space_above", "label": "Space above the line", "default": true }
+  ],
+  "presets": [{ "name": "Simmer Divider" }]
+}
+{% endschema %}

@@ -1,0 +1,38 @@
+{%- comment -%} Simmer product card: tinted tile, second image and slide-in actions with tooltips on hover, then type, title, stars and price. Multi-variant products open quick view. {%- endcomment -%}
+{%- assign on_sale = false -%}
+{%- if product.compare_at_price > product.price -%}{%- assign on_sale = true -%}{%- endif -%}
+{%- assign rating = product.metafields.reviews.rating.value.rating | default: 0 -%}
+{%- assign rating_count = product.metafields.reviews.rating_count.value | default: 0 -%}
+{%- assign second = product.second_image -%}
+{%- if second == blank and product.images.size > 1 -%}{%- assign second = product.images[1] -%}{%- endif -%}
+<article class="sm-card">
+  <div class="sm-card__media">
+    <a class="sm-card__pics" href="{{ product.url }}" tabindex="-1" aria-hidden="true">
+      {%- render 'fynk-simmer-img', src: product.featured_image, alt: product.title, width: 800, lazy: true, class: 'sm-card__one' -%}
+      {%- if second != blank -%}{%- render 'fynk-simmer-img', src: second, alt: '', width: 800, lazy: true, class: 'sm-card__two' -%}{%- endif -%}
+    </a>
+    <div class="sm-card__side">
+      <button class="sm-card__icon sm-card__icon--quick" type="button" aria-label="{{ quick_label | default: 'Quick view' | escape }}: {{ product.title | escape }}" data-sm-quick="{{ product.url }}" data-rating="{{ rating }}" data-count="{{ rating_count }}">{%- render 'fynk-simmer-icon', name: 'eye', size: 14, stroke: 1.8 -%}<span class="sm-card__tip" aria-hidden="true">{{ quick_label | default: 'Quick View' }}</span></button>
+      <button class="sm-card__icon sm-card__icon--wish" type="button" aria-pressed="false" aria-label="{{ wish_label | default: 'Add to wishlist' | escape }}: {{ product.title | escape }}" data-sm-wish="{{ product.url }}" data-title="{{ product.title | escape }}" data-image="{% if product.featured_image contains '/' %}{{ product.featured_image }}{% else %}{{ product.featured_image | image_url: width: 200 }}{% endif %}">{%- render 'fynk-simmer-icon', name: 'star', size: 14, stroke: 1.8 -%}<span class="sm-card__tip" aria-hidden="true">{{ wish_label | default: 'Add To Wishlist' }}</span></button>
+    </div>
+    <div class="sm-card__buy">
+      {%- if product.available == false -%}
+        <button class="sm-card__btn" type="button" disabled>{% render 'fynk-simmer-ui-string', key: 'sold_out' %}</button>
+      {%- elsif product.has_only_default_variant == false -%}
+        <button class="sm-card__btn" type="button" data-sm-quick="{{ product.url }}" data-rating="{{ rating }}" data-count="{{ rating_count }}">{{ quick_add_label | default: 'Quick Add' }}</button>
+      {%- else -%}
+        {%- form 'product', product -%}
+          <input type="hidden" name="id" value="{{ product.selected_or_first_available_variant.id }}">
+          <button class="sm-card__btn" type="submit" data-sm-add>{% render 'fynk-simmer-ui-string', key: 'add_to_cart' %}</button>
+        {%- endform -%}
+      {%- endif -%}
+    </div>
+  </div>
+  {%- if product.type != blank -%}<p class="sm-card__type">{{ product.type }}</p>{%- endif -%}
+  <h3 class="sm-card__title"><a href="{{ product.url }}">{{ product.title }}</a></h3>
+  <span class="sm-stars" style="--sm-rate: {{ rating | times: 20 }}%" role="img" aria-label="{{ rating }} / 5"></span>
+  <p class="sm-card__price">
+    <span>{{ product.price | money }}</span>
+    {%- if on_sale -%}<s>{{ product.compare_at_price | money }}</s>{%- endif -%}
+  </p>
+</article>

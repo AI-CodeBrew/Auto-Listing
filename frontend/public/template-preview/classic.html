@@ -253,6 +253,68 @@
     .au-ing strong { font-size: 22px; }
   }
 </style>
+<section class="au-cmp" style="--au-cmp-band: #f3f1ec; --au-cmp-ink: #1b2540; --au-cmp-accent: #c8563e;">
+  <div class="au-cmp__grid">
+    <div class="au-cmp__copy">
+      <h2>Why Choose Us?</h2><p>Choose this balaclava for its integrated hood and face covering, adjustable face-opening drawstrings, and stated fit details.</p><button type="button" class="au-cmp__btn" data-au-shop>Shop now</button>
+    </div>
+    <table class="au-cmp__table">
+      <thead>
+        <tr>
+          <th scope="col">Features</th>
+          <th scope="col" class="au-cmp__us"><img src="/template-preview/hood-1.jpg" alt="3-in-1 Fleece Balaclava Hood" loading="lazy"></th>
+          <th scope="col">Others</th>
+        </tr>
+      </thead>
+      <tbody><tr>
+            <th scope="row">Hood and face covering together</th>
+            <td class="au-cmp__us"><span class="au-cmp__yes" aria-label="Yes">&#10003;</span></td>
+            <td><span class="au-cmp__no" aria-label="No">&#10005;</span></td>
+          </tr><tr>
+            <th scope="row">Adjustable face-opening drawstrings</th>
+            <td class="au-cmp__us"><span class="au-cmp__yes" aria-label="Yes">&#10003;</span></td>
+            <td><span class="au-cmp__no" aria-label="No">&#10005;</span></td>
+          </tr><tr>
+            <th scope="row">Shown in four color options</th>
+            <td class="au-cmp__us"><span class="au-cmp__yes" aria-label="Yes">&#10003;</span></td>
+            <td><span class="au-cmp__no" aria-label="No">&#10005;</span></td>
+          </tr><tr>
+            <th scope="row">Stated 55–60 cm head circumference</th>
+            <td class="au-cmp__us"><span class="au-cmp__yes" aria-label="Yes">&#10003;</span></td>
+            <td><span class="au-cmp__no" aria-label="No">&#10005;</span></td>
+          </tr></tbody>
+    </table>
+  </div>
+</section>
+<style>
+  .au-cmp { background: var(--au-cmp-band); color: var(--au-cmp-ink); font-family: "DM Sans", system-ui, sans-serif; padding: 72px 0; }
+  .au-cmp__grid { width: min(1180px, calc(100% - 48px)); margin: 0 auto; display: grid; gap: 28px; align-items: center; min-width: 0; }
+  @media (min-width: 990px) { .au-cmp__grid { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 56px; } }
+  .au-cmp__copy h2 { margin: 0 0 14px; font-size: clamp(30px, 3.6vw, 44px); line-height: 1.1; letter-spacing: -0.02em; font-weight: 800; }
+  .au-cmp__copy p { margin: 0 0 24px; max-width: 46ch; color: var(--au-cmp-ink); opacity: 0.72; font-size: 16px; line-height: 1.55; }
+  .au-cmp__btn { display: inline-flex; padding: 13px 26px; border: 0; border-radius: 10px; background: var(--au-cmp-accent); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+  .au-cmp__table { width: 100%; border-collapse: separate; border-spacing: 0; background: #fff; border: 1px solid var(--au-cmp-ink); border-radius: 14px; overflow: hidden; table-layout: fixed; }
+  .au-cmp__table th, .au-cmp__table td { padding: 18px 20px; border-bottom: 1px solid var(--au-cmp-ink); text-align: center; font-weight: 400; }
+  .au-cmp__table tr:last-child th, .au-cmp__table tr:last-child td { border-bottom: 0; }
+  .au-cmp__table thead th { background: rgb(255 255 255 / 0.55); font-size: 15px; }
+  .au-cmp__table th[scope="row"], .au-cmp__table thead th:first-child { text-align: start; width: 48%; font-size: 15px; }
+  .au-cmp__table .au-cmp__us { background: var(--au-cmp-accent); color: #fff; border-inline-start: 1px solid var(--au-cmp-ink); border-inline-end: 1px solid var(--au-cmp-ink); }
+  .au-cmp__table thead .au-cmp__us img { width: 88px; height: 88px; object-fit: cover; border-radius: 12px; display: block; margin: 0 auto; background: #fff; }
+  .au-cmp__yes, .au-cmp__no { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; font-size: 16px; }
+  .au-cmp__yes { background: #eaf5ee; color: #2f7e78; font-weight: 900; }
+  .au-cmp__no { background: #f6e3e0; color: #b8462f; }
+  @media (max-width: 989px) { .au-cmp { padding: 48px 0; } .au-cmp__table th, .au-cmp__table td { padding: 12px 10px; } .au-cmp__table thead .au-cmp__us img { width: 56px; height: 56px; } }
+</style>
+<script>
+  (function () {
+    document.querySelectorAll("[data-au-shop]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var buy = document.querySelector(".au-hero");
+        if (buy) buy.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+  })();
+</script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=DM+Sans:wght@400;500;600&display=swap"><section class="au-steps"><p>How it works</p><h2>It&#39;s time to achieve more with less</h2><span>Three easy steps from your screen to your door.</span><div class="au-steps-grid"><article ><img src="/template-preview/hood-3.jpg" alt="" loading="lazy"><b>Step 01</b>
         <h3>Choose your option</h3><em>Pick the size or style you like.</em></article><article ><img src="/template-preview/hood-4.jpg" alt="" loading="lazy"><b>Step 02</b>
         <h3>Place your order</h3><em>Secure checkout takes a minute.</em></article><article ><img src="/template-preview/hood-5.jpg" alt="" loading="lazy"><b>Step 03</b>

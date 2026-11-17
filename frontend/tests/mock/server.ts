@@ -68,6 +68,11 @@ function freshState() {
     themeLimit: false,
     /** Active products on the storefront, for the product page preview link. */
     activeProducts: [{ handle: "steel-bottle" }] as { handle: string }[],
+    /** Collections of the store, for the links an entire store design points to. */
+    collections: [{ handle: "kitchen" }, { handle: "garden" }] as { handle: string }[],
+    /** Shop metafields an entire store design saved. */
+    shopMetafields: [] as { ownerId: string; namespace: string; key: string; type: string; value: string }[],
+    shopMetafieldError: null as string | null,
   };
 }
 export type MockState = ReturnType<typeof freshState>;
@@ -308,6 +313,21 @@ function handleThemeOperation(name: string, variables: any): Record<string, unkn
     return { data: { themes: { nodes: state.themes.filter((theme) => theme.role === "MAIN").map(({ id, name: themeName }) => ({ id, name: themeName })) } } };
   }
   if (name === "ThemeSampleProduct") return { data: { products: { nodes: state.activeProducts.slice(0, 1) } } };
+  if (name === "ThemeHasFiles") {
+    const theme = findTheme(variables.id)!;
+    return { data: { theme: { files: { nodes: (variables.names as string[]).filter((filename) => filename in theme.files).map((filename) => ({ filename })) } } } };
+  }
+  if (name === "ShopFacts") {
+    return { data: { shop: { id: "gid://shopify/Shop/1", name: "Mock Store" }, collections: { nodes: state.collections } } };
+  }
+  if (name === "SetShopMetafield") {
+    if (state.shopMetafieldError) return { data: { metafieldsSet: { metafields: [], userErrors: [{ field: ["metafields"], code: "INVALID", message: state.shopMetafieldError }] } } };
+    for (const field of variables.metafields as typeof state.shopMetafields) {
+      state.shopMetafields = state.shopMetafields.filter((saved) => !(saved.namespace === field.namespace && saved.key === field.key));
+      state.shopMetafields.push(field);
+    }
+    return { data: { metafieldsSet: { metafields: [{ id: "gid://shopify/Metafield/1" }], userErrors: [] } } };
+  }
   if (name === "DuplicateTheme") {
     const source = findTheme(variables.id);
     if (!source) return { data: { themeDuplicate: { newTheme: null, userErrors: [{ code: "NOT_FOUND", field: ["id"], message: "Theme not found" }] } } };

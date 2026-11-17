@@ -1,0 +1,112 @@
+{%- assign store_gen = shop.metafields.fynk.store_generation.value -%}
+{%- assign ht = store_gen.home_page.text -%}
+{%- assign hi = store_gen.home_page.images -%}
+{%- assign homeData = section.settings.homeData -%}
+{%- if ht == blank and homeData.text != blank -%}{%- assign ht = homeData.text -%}{%- endif -%}
+{%- if hi == blank and homeData.images != blank -%}{%- assign hi = homeData.images -%}{%- endif -%}
+{%- assign url = routes.all_products_collection_url | default: '/collections/all' -%}
+{%- assign film = section.settings.video -%}
+{%- assign video_url = section.settings.video_url | default: homeData.demo_video_url -%}
+{%- capture sm_html -%}
+{%- if ht.lookbook_heading != blank -%}
+<section class="sm-lb">
+  <div class="sm-lb__grid">
+    <div class="sm-lb__tile sm-lb__tile--1 sm-lb__zoom" data-sm-reveal>
+      <a class="sm-lb__media" href="{{ url }}" tabindex="-1" aria-hidden="true">{%- render 'fynk-simmer-img', src: hi.lookbook_image_1, alt: ht.lookbook_heading, width: 1600, lazy: true -%}</a>
+      <div class="sm-lb__copy">
+        {%- if ht.lookbook_kicker != blank -%}<p class="sm-lb__kick">{{ ht.lookbook_kicker }}</p>{%- endif -%}
+        <h2 class="sm-lb__title">{{ ht.lookbook_heading }}</h2>
+        {%- if ht.lookbook_text != blank -%}<p class="sm-lb__text">{{ ht.lookbook_text }}</p>{%- endif -%}
+        <a class="sm-go sm-lb__go" href="{{ url }}">{{ ht.label_view_collection | default: 'View All Collection' }}{%- render 'fynk-simmer-icon', name: 'arrow', size: 14 -%}</a>
+      </div>
+    </div>
+    <a class="sm-lb__tile sm-lb__tile--2 sm-lb__zoom" href="{{ url }}" aria-label="{{ ht.lookbook_heading | escape }}" data-sm-reveal style="--sm-delay: .1s">{%- render 'fynk-simmer-img', src: hi.lookbook_image_2, alt: '', width: 800, lazy: true -%}</a>
+    <a class="sm-lb__tile sm-lb__tile--3 sm-lb__zoom" href="{{ url }}" aria-label="{{ ht.lookbook_heading | escape }}" data-sm-reveal>{%- render 'fynk-simmer-img', src: hi.lookbook_image_3, alt: '', width: 800, lazy: true -%}</a>
+    <div class="sm-lb__tile sm-lb__tile--4" data-sm-video-tile data-sm-reveal style="--sm-delay: .1s">
+      {%- if film != blank -%}
+        {{ film | video_tag: class: 'sm-lb__film', playsinline: true, loop: true, muted: true, preload: 'metadata', image_size: '1600x' }}
+      {%- else -%}
+        {%- render 'fynk-simmer-img', src: hi.lookbook_image_4, alt: ht.video_heading, width: 1600, lazy: true -%}
+      {%- endif -%}
+      <div class="sm-lb__center">
+        {%- if ht.video_heading != blank -%}<h2 class="sm-lb__vtitle">{{ ht.video_heading }}</h2>{%- endif -%}
+        {%- if film != blank -%}
+          <button class="sm-lb__play" type="button" aria-label="{{ ht.label_play_video | default: 'Play Video' | escape }}" data-sm-play>{%- render 'fynk-simmer-icon', name: 'play', size: 18 -%}</button>
+        {%- elsif video_url != blank -%}
+          <a class="sm-lb__play" href="{{ video_url }}" aria-label="{{ ht.label_play_video | default: 'Play Video' | escape }}" data-sm-video="{{ video_url }}">{%- render 'fynk-simmer-icon', name: 'play', size: 18 -%}</a>
+        {%- endif -%}
+      </div>
+    </div>
+  </div>
+  {%- if film == blank and video_url != blank -%}
+    <dialog class="sm-modal sm-lb__video" data-sm-dialog="video" aria-label="{{ ht.label_play_video | default: 'Play Video' | escape }}">
+      <button class="sm-x sm-corner" type="button" aria-label="Close" data-sm-close>{%- render 'fynk-simmer-icon', name: 'close', size: 18 -%}</button>
+      <div class="sm-lb__frame" data-sm-video-box></div>
+    </dialog>
+  {%- endif -%}
+</section>
+{%- endif -%}
+<style>
+  @keyframes sm-pulse { 0% { box-shadow: 0 0 0 0 rgb(255 255 255 / .55); } 100% { box-shadow: 0 0 0 18px rgb(255 255 255 / 0); } }
+  .sm .sm-lb { padding-block-end: 120px; background: #fff; }
+  /* Two rows, wide and narrow tiles swapping sides: 73.25% and 26.75% of the row, 10px apart. */
+  .sm .sm-lb__grid { display: grid; grid-template-columns: calc(26.75% - 7.33px) minmax(0, 1fr) calc(26.75% - 7.33px); grid-template-areas: "a a b" "c d d"; gap: 10px; }
+  .sm .sm-lb__tile { position: relative; display: block; min-width: 0; overflow: hidden; background: var(--sm-tile); transform: translateZ(0); }
+  .sm .sm-lb__tile img, .sm .sm-lb__film { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .sm .sm-lb__zoom img { transition: all 1.5s ease-out; }
+  .sm .sm-lb__zoom:hover img { transform: scale(1.07); }
+  .sm .sm-lb__tile--1 { grid-area: a; aspect-ratio: 998 / 427; }
+  .sm .sm-lb__tile--2 { grid-area: b; }
+  .sm .sm-lb__tile--3 { grid-area: c; aspect-ratio: 358 / 425; }
+  .sm .sm-lb__tile--4 { grid-area: d; }
+  .sm .sm-lb__media { position: absolute; inset: 0; }
+  .sm .sm-lb__media::after, .sm .sm-lb__tile--4::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, rgb(12 10 9 / .38), rgb(12 10 9 / 0) 70%); pointer-events: none; }
+  .sm .sm-lb__tile--4::after { z-index: 1; background: rgb(12 10 9 / .22); transition: opacity .4s ease; }
+  .sm .sm-lb__copy { position: absolute; inset-inline-start: 30px; bottom: 30px; z-index: 2; width: 55%; color: #fff; }
+  .sm .sm-lb__kick { margin-bottom: 15px; font-size: 12px; line-height: 18px; text-transform: uppercase; color: #fff; }
+  .sm .sm-lb__title { margin-bottom: 20px; font-size: 36px; line-height: 43.2px; font-weight: 500 !important; color: #fff; }
+  .sm .sm-lb__text { margin-bottom: 19px; font-size: 14px; line-height: 21px; color: #fff; }
+  .sm .sm-lb__go { color: #fff; }
+  .sm .sm-lb__go:hover { color: #fff; }
+  .sm .sm-lb__center { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; transition: opacity .4s ease, visibility .4s; }
+  .sm .sm-lb__vtitle { max-width: 470px; font-size: 28.8px; line-height: 43.2px; font-weight: 500 !important; color: #fff; }
+  .sm .sm-lb__play { display: grid; place-items: center; width: 67px; height: 67px; margin-top: 40px; padding: 0; padding-inline-start: 3px; border: 0; border-radius: 50%; background: #fff; color: var(--sm-ink); cursor: pointer; animation: sm-pulse 1.5s ease-in-out infinite; transition: background-color .25s ease, color .25s ease; }
+  .sm .sm-lb__play svg { fill: currentColor; }
+  .sm .sm-lb__play:hover { background: var(--sm-accent); color: #fff; }
+  .sm .sm-lb__tile--4.is-playing .sm-lb__center, .sm .sm-lb__tile--4.is-playing::after { opacity: 0; visibility: hidden; }
+  .sm .sm-lb__video { width: min(1000px, calc(100% - 32px)); border-radius: 10px; overflow: hidden; background: #000; }
+  .sm .sm-lb__frame { aspect-ratio: 16 / 9; }
+  .sm .sm-lb__frame :is(iframe, video) { display: block; width: 100%; height: 100%; border: 0; }
+  @media (max-width: 1199px) {
+    .sm .sm-lb { padding-block-end: 100px; }
+    .sm .sm-lb__title { font-size: 30px; line-height: 39px; }
+    .sm .sm-lb__vtitle { font-size: 24px; line-height: 36px; }
+  }
+  @media (max-width: 991px) { .sm .sm-lb { padding-block-end: 80px; } .sm .sm-lb__copy { width: calc(100% - 60px); } }
+  @media (max-width: 767px) {
+    .sm .sm-lb { padding-block-end: 60px; }
+    .sm .sm-lb__grid { grid-template-columns: 1fr; grid-template-areas: "a" "b" "c" "d"; }
+    .sm .sm-lb__tile--1 { aspect-ratio: 375 / 280; }
+    .sm .sm-lb__tile--2, .sm .sm-lb__tile--3 { aspect-ratio: 375 / 445; }
+    .sm .sm-lb__tile--4 { aspect-ratio: 375 / 260; }
+    .sm .sm-lb__copy { inset-inline-start: 15px; bottom: 15px; width: calc(100% - 30px); }
+    .sm .sm-lb__title { margin-bottom: 10px; font-size: 22px; line-height: 30px; }
+    .sm .sm-lb__text { font-size: 11px; line-height: 16px; }
+    .sm .sm-lb__vtitle { font-size: 18px; line-height: 27px; }
+    .sm .sm-lb__play { width: 50px; height: 50px; margin-top: 20px; }
+  }
+</style>
+{%- endcapture -%}
+{%- render 'fynk-simmer-wrap', html: sm_html -%}
+
+{% schema %}
+{
+  "name": "Simmer Lookbook",
+  "tag": "section",
+  "settings": [
+    { "type": "video", "id": "video", "label": "Video", "info": "Plays in the wide tile when the shopper presses play." },
+    { "type": "video_url", "id": "video_url", "label": "Or a YouTube or Vimeo link", "accept": ["youtube", "vimeo"], "info": "Opens in a window. Without any video, the tile shows its picture and heading only." }
+  ],
+  "presets": [{ "name": "Simmer Lookbook" }]
+}
+{% endschema %}

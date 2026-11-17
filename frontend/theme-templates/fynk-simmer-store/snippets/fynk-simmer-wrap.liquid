@@ -1,0 +1,3 @@
+{%- comment -%} Simmer section root: scopes the shared CSS, flips to right-to-left when the output holds Arabic-script letters, and starts the behaviours of what it just added. {%- endcomment -%}
+<div class="sm"{% if html contains 'ا' or html contains 'ل' or html contains 'ي' or html contains 'ة' %} dir="rtl"{% endif %}>{{ html }}</div>
+<script>window.__sm && window.__sm.init();</script>

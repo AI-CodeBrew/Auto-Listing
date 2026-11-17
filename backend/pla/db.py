@@ -175,6 +175,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
     add_column("products", "category", "category TEXT")
     # Which signed-in account made the listing. Empty for listings made before accounts existed.
     add_column("products", "owner_id", "owner_id TEXT")
+    # The vendor the user typed on the Approved listings page. Never filled from a source page.
+    add_column("products", "vendor", "vendor TEXT")
 
 
 def _open_sqlite(path: str) -> sqlite3.Connection:

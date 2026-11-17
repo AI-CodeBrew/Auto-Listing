@@ -1,0 +1,12 @@
+{%- comment -%} The two words the Simmer sections print themselves. {%- endcomment -%}
+{%- liquid
+  case key
+    when 'shop_now'
+      assign _out = 'Shop now'
+    when 'sold_out'
+      assign _out = 'Sold out'
+    else
+      assign _out = key
+  endcase
+-%}
+{{- _out -}}

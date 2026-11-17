@@ -1,0 +1,118 @@
+{%- assign store_gen = shop.metafields.fynk.store_generation.value -%}
+{%- assign ht = store_gen.home_page.text -%}
+{%- assign hi = store_gen.home_page.images -%}
+{%- assign homeData = section.settings.homeData -%}
+{%- if ht == blank and homeData.text != blank -%}{%- assign ht = homeData.text -%}{%- endif -%}
+{%- if hi == blank and homeData.images != blank -%}{%- assign hi = homeData.images -%}{%- endif -%}
+{%- assign social = shop.brand.metafields.social_links -%}
+{%- assign follow_url = section.settings.link | default: ht.social_instagram | default: social.instagram.value -%}
+{%- assign heading = ht.gallery_heading -%}
+{%- if heading == blank -%}{%- assign heading = shop.name | remove: ' ' | prepend: '@' -%}{%- endif -%}
+{%- assign count = 0 -%}
+{%- capture tiles -%}
+  {%- for i in (1..10) -%}
+    {%- assign image_key = 'gallery_image_' | append: i -%}
+    {%- assign pic = hi[image_key] -%}
+    {%- if pic != blank -%}
+      {%- assign count = count | plus: 1 -%}
+      {%- if pic contains '/' -%}{%- assign full = pic -%}{%- else -%}{%- assign full = pic | image_url: width: 1400 -%}{%- endif -%}
+      <div class="sm-ig__item">
+        <a class="sm-ig__card" href="{{ full }}" data-sm-zoom="ig" aria-label="{{ heading | escape }} {{ i }}">
+          {%- render 'fynk-simmer-img', src: pic, alt: '', width: 700, lazy: true -%}
+          <span class="sm-ig__icon" aria-hidden="true">{%- render 'fynk-simmer-icon', name: 'instagram', size: 34, stroke: 1.4 -%}</span>
+        </a>
+      </div>
+    {%- endif -%}
+  {%- endfor -%}
+{%- endcapture -%}
+{%- capture sm_html -%}
+{%- if count > 0 -%}
+<section class="sm-ig">
+  <div data-sm-reveal>
+    <div class="sm-fluid sm-ig__head">
+      <div class="sm-ig__copy">
+        {%- if ht.gallery_kicker != blank -%}<p class="sm-kick">{{ ht.gallery_kicker }}</p>{%- endif -%}
+        <h2 class="sm-title sm-ig__title">{{ heading }}</h2>
+        {%- if ht.gallery_text != blank -%}<p class="sm-ig__text">{{ ht.gallery_text }}</p>{%- endif -%}
+      </div>
+      {%- if follow_url != blank -%}
+        <a class="sm-btn sm-btn--dark sm-ig__follow" href="{{ follow_url }}" target="_blank" rel="noopener">{%- render 'fynk-simmer-icon', name: 'instagram', size: 16, stroke: 2 -%}<span>{{ ht.label_follow_now | default: 'Follow Now' }}</span></a>
+      {%- endif -%}
+    </div>
+    <div class="sm-ig__strip" style="--sm-ig-time: {{ count | times: 4 }}s">
+      <div class="sm-ig__row">{{ tiles }}</div>
+      <div class="sm-ig__row" aria-hidden="true" inert>{{ tiles }}</div>
+    </div>
+  </div>
+  <dialog class="sm-zoom" data-sm-dialog="zoom" aria-label="{{ heading | escape }}">
+    <div class="sm-zoom__bar">
+      <span class="sm-zoom__count" data-sm-zoom-count></span>
+      <button class="sm-zoom__btn" type="button" aria-label="Close" data-sm-close>{%- render 'fynk-simmer-icon', name: 'close', size: 22 -%}</button>
+    </div>
+    <button class="sm-zoom__btn sm-zoom__nav sm-zoom__nav--prev" type="button" aria-label="Previous picture" data-sm-zoom-prev>{%- render 'fynk-simmer-icon', name: 'prev', size: 26 -%}</button>
+    <img class="sm-zoom__img" src="" alt="" data-sm-zoom-img>
+    <button class="sm-zoom__btn sm-zoom__nav sm-zoom__nav--next" type="button" aria-label="Next picture" data-sm-zoom-next>{%- render 'fynk-simmer-icon', name: 'next', size: 26 -%}</button>
+  </dialog>
+</section>
+{%- endif -%}
+<style>
+  @keyframes sm-marquee { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+  @keyframes sm-marquee-rtl { from { transform: translateX(0); } to { transform: translateX(100%); } }
+  .sm .sm-ig { padding-block: 120px; background: #fff; }
+  .sm .sm-ig__head { display: flex; align-items: flex-end; justify-content: space-between; gap: 30px; margin-bottom: 60px; }
+  .sm .sm-ig__copy { min-width: 0; }
+  .sm .sm-ig__copy .sm-kick { margin-bottom: 15px; }
+  .sm .sm-ig__title { margin-top: 0; }
+  .sm .sm-ig__text { max-width: 570px; margin-top: 10px; font-size: 16px; line-height: 24px; color: var(--sm-text); }
+  .sm .sm-ig__follow { flex: none; min-width: 180px; gap: 10px; }
+  .sm .sm-ig__strip { display: flex; overflow: hidden; padding-bottom: 80px; }
+  .sm .sm-ig__row { flex: none; display: flex; animation: sm-marquee var(--sm-ig-time, 24s) linear infinite; }
+  .sm[dir="rtl"] .sm-ig__row { animation-name: sm-marquee-rtl; }
+  .sm .sm-ig__strip:hover .sm-ig__row { animation-play-state: paused; }
+  .sm .sm-ig__item { flex: 0 0 20vw; width: 20vw; padding-inline: 5px; }
+  .sm .sm-ig__item:nth-child(2n) { transform: translateY(15%); }
+  .sm .sm-ig__card { position: relative; display: block; aspect-ratio: 263 / 359; overflow: hidden; border-radius: 5px; background: var(--sm-tile); transform: translateZ(0); }
+  .sm .sm-ig__card img { width: 100%; height: 100%; object-fit: cover; transition: all 1s; }
+  .sm .sm-ig__card::before { content: ""; position: absolute; inset: 0; z-index: 9; background: rgb(0 0 0 / .5); opacity: 0; visibility: hidden; transition: .3s linear; }
+  .sm .sm-ig__icon { position: absolute; top: 50%; left: 50%; z-index: 10; display: grid; color: #fff; opacity: 0; transform: translate(-50%, -50%); transition: .3s; }
+  .sm .sm-ig__card:hover::before, .sm .sm-ig__card:focus-visible::before { opacity: 1; visibility: visible; }
+  .sm .sm-ig__card:hover .sm-ig__icon, .sm .sm-ig__card:focus-visible .sm-ig__icon { opacity: 1; }
+  @media (min-width: 768px) { .sm .sm-ig__card:hover img { transform: scale(1.08); } }
+
+  .sm .sm-zoom { position: fixed; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; display: none; align-items: center; justify-content: center; background: rgb(30 30 30 / .9); color: #fff; }
+  .sm .sm-zoom[open] { display: flex; animation: sm-pop .3s ease both; }
+  .sm .sm-zoom::backdrop { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .sm .sm-zoom__img { max-width: min(92vw, 1200px); max-height: 86vh; width: auto; height: auto; object-fit: contain; }
+  .sm .sm-zoom__bar { position: absolute; top: 0; inset-inline: 0; display: flex; align-items: center; justify-content: space-between; padding-inline-start: 18px; }
+  .sm .sm-zoom__count { font-size: 13px; color: #ccc; }
+  .sm .sm-zoom__btn { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; background: rgb(30 30 30 / .6); color: #ccc; cursor: pointer; transition: color .2s ease; }
+  .sm .sm-zoom__btn:hover { color: #fff; }
+  .sm .sm-zoom__nav { position: absolute; top: 50%; width: 54px; height: 70px; margin-top: -35px; }
+  .sm .sm-zoom__nav--prev { inset-inline-start: 0; }
+  .sm .sm-zoom__nav--next { inset-inline-end: 0; }
+  .sm[dir="rtl"] .sm-zoom__nav svg { transform: scaleX(-1); }
+
+  @media (max-width: 1199px) { .sm .sm-ig { padding-block: 100px; } .sm .sm-ig__item { flex-basis: 25vw; width: 25vw; } }
+  @media (max-width: 991px) { .sm .sm-ig { padding-block: 80px; } .sm .sm-ig__item { flex-basis: 33.3333vw; width: 33.3333vw; } }
+  @media (max-width: 767px) {
+    .sm .sm-ig { padding-block: 60px; }
+    .sm .sm-ig__head { display: block; margin-bottom: 30px; }
+    .sm .sm-ig__follow { margin-top: 30px; min-width: 123px; }
+    .sm .sm-ig__item { flex-basis: 50vw; width: 50vw; }
+    .sm .sm-ig__strip { padding-bottom: 50px; }
+  }
+  @media (max-width: 575px) { .sm .sm-ig__item { flex-basis: 33.3333vw; width: 33.3333vw; } }
+</style>
+{%- endcapture -%}
+{%- render 'fynk-simmer-wrap', html: sm_html -%}
+
+{% schema %}
+{
+  "name": "Simmer Gallery",
+  "tag": "section",
+  "settings": [
+    { "type": "url", "id": "link", "label": "Follow button link", "info": "Defaults to the Instagram link in your store's brand settings. The button is hidden when there is no link." }
+  ],
+  "presets": [{ "name": "Simmer Gallery" }]
+}
+{% endschema %}

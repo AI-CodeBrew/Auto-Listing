@@ -1,0 +1,79 @@
+{%- assign store_gen = shop.metafields.fynk.store_generation.value -%}
+{%- assign ht = store_gen.home_page.text -%}
+{%- assign hi = store_gen.home_page.images -%}
+{%- assign homeData = section.settings.homeData -%}
+{%- if ht == blank and homeData.text != blank -%}{%- assign ht = homeData.text -%}{%- endif -%}
+{%- if hi == blank and homeData.images != blank -%}{%- assign hi = homeData.images -%}{%- endif -%}
+{%- capture sm_html -%}
+{%- if ht.faq_q_1 != blank -%}
+<section class="sm-fq{% if hi.faq_image == blank %} sm-fq--solo{% endif %}">
+  <div class="sm-fq__grid">
+    {%- if hi.faq_image != blank -%}
+      <div class="sm-fq__pic">{%- render 'fynk-simmer-img', src: hi.faq_image, alt: ht.faq_heading, width: 1200, lazy: true -%}</div>
+    {%- endif -%}
+    <div class="sm-fq__side">
+      <div class="sm-fq__head">
+        {%- if ht.faq_kicker != blank -%}<p class="sm-kick">{{ ht.faq_kicker }}</p>{%- endif -%}
+        <h2 class="sm-title sm-fq__title">{{ ht.faq_heading }}</h2>
+      </div>
+      <div class="sm-fq__list" data-sm-fold>
+        {%- for i in (1..6) -%}
+          {%- assign q_key = 'faq_q_' | append: i -%}
+          {%- assign a_key = 'faq_a_' | append: i -%}
+          {%- if ht[q_key] != blank -%}
+            <div class="sm-fq__item{% if i == 1 %} is-open{% endif %}" data-sm-fold-item data-sm-reveal style="--sm-delay: .{{ i }}s">
+              <h3 class="sm-fq__h"><button class="sm-fq__q" type="button" aria-expanded="{% if i == 1 %}true{% else %}false{% endif %}"><span>{{ ht[q_key] }}</span><i aria-hidden="true"></i></button></h3>
+              <div class="sm-fq__fold"><div><p class="sm-fq__a">{{ ht[a_key] }}</p></div></div>
+            </div>
+          {%- endif -%}
+        {%- endfor -%}
+      </div>
+    </div>
+  </div>
+</section>
+{%- endif -%}
+<style>
+  .sm .sm-fq { padding-block-end: 120px; background: #fff; }
+  .sm .sm-fq__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: center; }
+  .sm .sm-fq--solo .sm-fq__grid { grid-template-columns: minmax(0, 1fr); width: min(100%, 970px); margin-inline: auto; }
+  .sm .sm-fq__pic { position: relative; aspect-ratio: 1 / 1; overflow: hidden; background: var(--sm-tile); }
+  .sm .sm-fq__pic img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .sm .sm-fq__side { min-width: 0; padding-inline: 6%; }
+  .sm .sm-fq__head { margin-bottom: 65px; }
+  .sm .sm-fq__head .sm-kick { margin-bottom: 15px; }
+  .sm .sm-fq__title { margin-top: 0; }
+  .sm .sm-fq__item:not(:last-child) { margin-bottom: 28.8px; padding-bottom: 28.8px; border-bottom: 1px solid var(--sm-rule); }
+  .sm .sm-fq__h { font-size: inherit; }
+  .sm .sm-fq__q { position: relative; display: block; width: 100%; padding: 0 25px 0 0; border: 0; background: none; font-size: 15.36px; line-height: 23.04px; font-weight: 500; text-align: start; color: var(--sm-ink); cursor: pointer; transition: color .3s; }
+  .sm[dir="rtl"] .sm-fq__q { padding: 0 0 0 25px; }
+  .sm .sm-fq__q:hover { color: var(--sm-accent); }
+  .sm .sm-fq__q i { position: absolute; top: 50%; inset-inline-end: 0; width: 12px; height: 12px; margin-top: -6px; }
+  .sm .sm-fq__q i::before, .sm .sm-fq__q i::after { content: ""; position: absolute; inset-inline-start: 0; top: 5.25px; width: 12px; height: 1.5px; background: currentColor; transition: transform .3s ease; }
+  .sm .sm-fq__q i::after { transform: rotate(90deg); }
+  .sm .sm-fq__item.is-open .sm-fq__q i::after { transform: rotate(0); }
+  .sm .sm-fq__fold { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .4s ease; }
+  .sm .sm-fq__item.is-open .sm-fq__fold { grid-template-rows: 1fr; }
+  .sm .sm-fq__fold > div { min-height: 0; overflow: hidden; }
+  .sm .sm-fq__a { padding: 20px 0 2px; font-size: 13.44px; line-height: 20.16px; color: var(--sm-text); }
+  @media (max-width: 1199px) { .sm .sm-fq { padding-block-end: 100px; } .sm .sm-fq__head { margin-bottom: 40px; } }
+  @media (max-width: 991px) { .sm .sm-fq { padding-block-end: 80px; } }
+  @media (max-width: 767px) {
+    .sm .sm-fq { padding-block-end: 60px; }
+    .sm .sm-fq__grid { grid-template-columns: minmax(0, 1fr); }
+    .sm .sm-fq__side { padding: 40px 15px 0; }
+    .sm .sm-fq--solo .sm-fq__side { padding-top: 0; }
+    .sm .sm-fq__head { margin-bottom: 30px; }
+    .sm .sm-fq__item:not(:last-child) { margin-bottom: 20px; padding-bottom: 20px; }
+  }
+</style>
+{%- endcapture -%}
+{%- render 'fynk-simmer-wrap', html: sm_html -%}
+
+{% schema %}
+{
+  "name": "Simmer FAQ",
+  "tag": "section",
+  "settings": [],
+  "presets": [{ "name": "Simmer FAQ" }]
+}
+{% endschema %}

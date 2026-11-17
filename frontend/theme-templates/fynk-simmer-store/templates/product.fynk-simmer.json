@@ -1,0 +1,33 @@
+{
+  "sections": {
+    "simmer-header": {
+      "type": "fynk-simmer-header",
+      "settings": {}
+    },
+    "simmer-product": {
+      "type": "fynk-simmer-product",
+      "settings": {}
+    },
+    "simmer-policy": {
+      "type": "fynk-simmer-policy",
+      "settings": {
+        "row": true
+      }
+    },
+    "simmer-footer": {
+      "type": "fynk-simmer-footer",
+      "settings": {}
+    },
+    "simmer-related": {
+      "type": "fynk-simmer-related",
+      "settings": {}
+    }
+  },
+  "order": [
+    "simmer-header",
+    "simmer-product",
+    "simmer-policy",
+    "simmer-related",
+    "simmer-footer"
+  ]
+}

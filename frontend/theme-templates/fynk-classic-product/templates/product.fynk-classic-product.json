@@ -65,6 +65,18 @@
         "kicker": "Top features"
       }
     },
+    "fynk-classic-compare": {
+      "type": "fynk-classic-compare",
+      "settings": {
+        "title": "Why Choose Us?",
+        "button_label": "Shop now",
+        "features_label": "Features",
+        "others_label": "Others",
+        "band_color": "#f3f1ec",
+        "text_color": "#1b2540",
+        "accent_color": "#c8563e"
+      }
+    },
     "fynk-classic-steps": {
       "type": "fynk-classic-steps",
       "blocks": {
@@ -142,6 +154,7 @@
     "fynk-classic-special",
     "fynk-classic-stats",
     "fynk-classic-features",
+    "fynk-classic-compare",
     "fynk-classic-steps",
     "fynk-classic-faq"
   ]

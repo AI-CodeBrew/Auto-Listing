@@ -719,6 +719,7 @@ def create_app() -> FastAPI:
             "description": body["description"] if body.get("description") is not None else product["description"],
             "price": price or None,
             "cost": cost or None,
+            "vendor": re.sub(r"\s+", " ", str(pick("vendor") or "")).strip()[:255] or None,
         })
         return ok({"product": repo.get_product(product_id)})
 
@@ -1175,6 +1176,23 @@ def create_app() -> FastAPI:
             items.append({**template, **template_size(template["id"]), "lastPush": last, "useForNew": template["id"] == chosen})
         return ok({"store": {"domain": domain, "missing": missing_shopify_settings()}, "running": is_theme_push_running(), "templates": items})
 
+    @app.get("/api/store-templates")
+    def store_templates_list(request: Request):
+        _, denied = need_user(request)
+        if denied:
+            return denied
+        from .shopify.client import missing_shopify_settings
+        from .shopify.theme import is_theme_push_running
+        from .templates import STORE_TEMPLATES, template_size
+
+        domain = settings.shopify_credentials()["domain"]
+        items = []
+        for template in STORE_TEMPLATES:
+            last = settings.last_template_push(template["id"])
+            last = last if last and last.get("domain") == domain else None
+            items.append({**template, **template_size(template["id"]), "lastPush": last})
+        return ok({"store": {"domain": domain, "missing": missing_shopify_settings()}, "running": is_theme_push_running(), "templates": items})
+
     @app.post("/api/templates/{template_id}/use")
     async def template_use(request: Request, template_id: str):
         """Products pushed from now on, to the active store, get this page. Products already there keep theirs."""
@@ -1204,9 +1222,9 @@ def create_app() -> FastAPI:
             return denied
         from .shopify.client import ShopifyError
         from .shopify.theme import is_theme_push_running, push_theme_template
-        from .templates import find_template
+        from .templates import find_store_template, find_template
 
-        template = find_template(template_id)
+        template = find_template(template_id) or find_store_template(template_id)
         if not template:
             return fail("Template not found.", 404)
         if is_theme_push_running():

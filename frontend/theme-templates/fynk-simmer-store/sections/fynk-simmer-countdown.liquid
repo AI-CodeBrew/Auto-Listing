@@ -1,0 +1,78 @@
+{%- assign store_gen = shop.metafields.fynk.store_generation.value -%}
+{%- assign ht = store_gen.home_page.text -%}
+{%- assign homeData = section.settings.homeData -%}
+{%- if ht == blank and homeData.text != blank -%}{%- assign ht = homeData.text -%}{%- endif -%}
+{%- assign deal_end = section.settings.end_date | default: homeData.demo_deal_end -%}
+{%- assign url = section.settings.link | default: routes.all_products_collection_url | default: '/collections/all' -%}
+{%- capture sm_html -%}
+<section class="sm-deal">
+  <div class="sm-fluid">
+    <div class="sm-deal__panel">
+      <div class="sm-deal__copy">
+        {%- if ht.deal_kicker != blank -%}<p class="sm-kick">{{ ht.deal_kicker }}</p>{%- endif -%}
+        <h2 class="sm-deal__title">{{ ht.deal_heading }}</h2>
+        {%- if ht.deal_text != blank -%}<p class="sm-deal__text">{{ ht.deal_text }}</p>{%- endif -%}
+      </div>
+      <div class="sm-deal__side" data-sm-reveal="right">
+        {%- if deal_end != blank -%}
+          <div class="sm-clock" data-sm-clock="{{ deal_end }}" role="timer" hidden>
+            <span class="sm-clock__part"><b data-d>00</b><small>{{ ht.label_days | default: 'Days' }}</small></span>
+            <span class="sm-clock__part"><b data-h>00</b><small>{{ ht.label_hours | default: 'Hours' }}</small></span>
+            <span class="sm-clock__part"><b data-m>00</b><small>{{ ht.label_mins | default: 'Mins' }}</small></span>
+            <span class="sm-clock__part"><b data-s>00</b><small>{{ ht.label_secs | default: 'Secs' }}</small></span>
+          </div>
+        {%- endif -%}
+        <a class="sm-go sm-deal__go" href="{{ url }}">{% render 'fynk-simmer-ui-string', key: 'shop_now' %}{%- render 'fynk-simmer-icon', name: 'arrow', size: 14 -%}</a>
+      </div>
+    </div>
+  </div>
+</section>
+<style>
+  .sm .sm-deal { background: #fff; }
+  .sm .sm-deal__panel { display: flex; align-items: center; justify-content: space-between; padding: 50px 15px; border-radius: 5px; background: var(--sm-deal); }
+  .sm .sm-deal__copy { flex: 0 0 50%; min-width: 0; padding-inline-end: 28.8px; }
+  .sm .sm-deal__copy .sm-kick { margin-bottom: 15px; }
+  .sm .sm-deal__title { font-size: 28.8px; line-height: 43.2px; font-weight: 500 !important; color: var(--sm-ink); }
+  .sm .sm-deal__text { margin-top: 10px; font-size: 16px; line-height: 24px; color: var(--sm-text); }
+  .sm .sm-deal__side { flex: 0 1 50%; display: flex; align-items: center; justify-content: flex-end; }
+  .sm .sm-clock { display: inline-flex; }
+  .sm .sm-clock__part { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .sm .sm-clock__part:not(:last-child) { margin-inline-end: 45px; }
+  .sm .sm-clock__part:not(:last-child)::after { content: ":"; position: absolute; top: calc(50% - 16px); inset-inline-end: -29px; font-size: 40px; line-height: 1; font-weight: 500; color: var(--sm-ink); transform: translateY(-50%); }
+  .sm .sm-clock__part b { width: 80px; height: 80px; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; border: 1px solid var(--sm-ink); border-radius: 5px; font-size: 28.8px; line-height: 43.2px; font-weight: 400; color: var(--sm-ink); font-variant-numeric: tabular-nums; }
+  .sm .sm-clock__part small { font-size: 12px; line-height: 18px; text-transform: uppercase; color: var(--sm-ink); }
+  .sm .sm-deal__go { margin-inline-start: 28.8px; white-space: nowrap; }
+  @media (max-width: 1365px) {
+    .sm .sm-clock__part:not(:last-child) { margin-inline-end: 30px; }
+    .sm .sm-clock__part:not(:last-child)::after { font-size: 25px; inset-inline-end: -20px; top: calc(50% - 14px); }
+    .sm .sm-clock__part b { width: 50px; height: 50px; font-size: 19.2px; line-height: 28.8px; }
+    .sm .sm-clock__part small { font-size: 11px; line-height: 16.5px; }
+  }
+  @media (min-width: 1366px) {
+    .sm .sm-clock__part:not(:last-child) { margin-inline-end: 45px; }
+  }
+  @media (max-width: 991px) {
+    .sm .sm-deal__panel { flex-direction: column; padding: 40px 15px; text-align: center; }
+    .sm .sm-deal__copy { padding: 0 0 30px; }
+    .sm .sm-deal__side { flex-direction: column; justify-content: center; }
+    .sm .sm-deal__go { margin: 25px 0 0; }
+  }
+  @media (max-width: 749px) {
+    .sm .sm-deal__title { font-size: 26.4px; line-height: 39.6px; }
+    .sm .sm-deal__text { font-size: 14px; line-height: 21px; }
+  }
+</style>
+{%- endcapture -%}
+{%- render 'fynk-simmer-wrap', html: sm_html -%}
+
+{% schema %}
+{
+  "name": "Simmer Countdown",
+  "tag": "section",
+  "settings": [
+    { "type": "text", "id": "end_date", "label": "Deal end date", "info": "For example 2026-12-31 23:59. The timer only shows for a real date that has not passed, so shoppers never see a fake deadline." },
+    { "type": "url", "id": "link", "label": "Link" }
+  ],
+  "presets": [{ "name": "Simmer Countdown" }]
+}
+{% endschema %}

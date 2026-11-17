@@ -24,17 +24,19 @@ const GROUPS = [
     label: "Workspace",
     items: [
       { href: "/", label: "Dashboard" },
+      { href: "/template", label: "Product page template" },
+      // Built, but not open to users yet: shown in the sidebar without a link.
+      { href: "/store-template", label: "Entire store template", disabled: true },
       { href: "/new", label: "Listings", children: LISTING_TABS },
       { href: "/creatives", label: "Find Creatives" },
       { href: "/usage", label: "Usage" },
-      { href: "/billing", label: "Billing" },
     ],
   },
   {
     label: "Settings",
     items: [
       { href: "/shopify", label: "Integrations" },
-      { href: "/template", label: "Template" },
+      { href: "/billing", label: "Billing" },
     ],
   },
 ];
@@ -76,7 +78,15 @@ export function Tabs({ status: data }: { status: Status | null }) {
               const active = item.href === "/" ? pathname === "/" : children ? children.some((child) => pathname === child.href) : pathname === item.href || pathname.startsWith(`${item.href}/`);
               return (
                 <div key={item.href}>
-                  {children ? (
+                  {"disabled" in item && item.disabled ? (
+                    <span className="nav-link nav-link-disabled" aria-disabled="true" title="Coming soon" data-testid="nav-disabled">
+                      <span className="nav-link-label">
+                        <NavIcon href={item.href} />
+                        {item.label}
+                      </span>
+                      <span className="nav-soon">Soon</span>
+                    </span>
+                  ) : children ? (
                     <button
                       type="button"
                       className={active ? "nav-link nav-toggle nav-link-open" : "nav-link nav-toggle"}
@@ -173,6 +183,15 @@ function NavIcon({ href }: { href: string }) {
       <svg {...props}>
         <rect x="3" y="3.5" width="18" height="17" rx="2" />
         <path d="M3 8.5h18M9 8.5v12" />
+      </svg>
+    );
+  }
+  if (href === "/store-template") {
+    return (
+      <svg {...props}>
+        <path d="M4 9.5 5.5 4h13L20 9.5" />
+        <path d="M4 9.5a2.7 2.7 0 0 0 5.3 0 2.7 2.7 0 0 0 5.4 0 2.7 2.7 0 0 0 5.3 0" />
+        <path d="M5 12.5V20h14v-7.5M10 20v-4.5h4V20" />
       </svg>
     );
   }

@@ -223,7 +223,8 @@ def _page_text(product: dict, warnings: list[str]) -> dict | None:
 
 
 def build_product_input(*, product: dict, image_sources: list[dict], file_video_sources: list[dict], external_videos: list[str], story: dict | None = None, update: bool = False) -> dict:
-    """Status is always DRAFT and vendor is never set, so the source seller's name cannot reach it."""
+    """Status is always DRAFT. Vendor is only what the user typed on the Approved listings page, so the
+    source seller's name cannot reach it."""
     title = (product.get("name") or "").strip()
     price = product["price"].strip() if (product.get("price") or "").strip() else "0.00"
     cost = (product.get("cost") or "").strip()
@@ -240,6 +241,8 @@ def build_product_input(*, product: dict, image_sources: list[dict], file_video_
     result["handle"] = product.get("shopify_handle")
     if (product.get("category") or "").strip():
         result["productType"] = product["category"].strip()
+    if (product.get("vendor") or "").strip():
+        result["vendor"] = product["vendor"].strip()
     result["descriptionHtml"] = description_to_html(product.get("description") or "")
     result["status"] = "DRAFT"
     result["productOptions"] = [{"name": "Title", "values": [{"name": "Default Title"}]}]

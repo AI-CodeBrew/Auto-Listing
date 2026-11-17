@@ -144,7 +144,7 @@ def listing_split(owner_id: str | None = ALL) -> dict:
 JSON_FIELDS = {"input_urls", "blocked_urls", "vision", "name_options", "claims", "warnings", "shopify_warnings"}
 PRODUCT_FIELDS = {
     "stage", "input_urls", "blocked_urls", "vision", "name", "name_options", "category", "description", "source_text", "claims",
-    "seller_name", "low_images", "warnings", "sku", "price", "cost", "shopify_status", "shopify_product_id",
+    "seller_name", "low_images", "warnings", "sku", "price", "cost", "vendor", "shopify_status", "shopify_product_id",
     "shopify_admin_url", "shopify_handle", "shopify_error", "shopify_warnings",
 }
 

@@ -215,6 +215,8 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS search_photos integer NOT NULL DEF
 ALTER TABLE products ADD COLUMN IF NOT EXISTS search_videos integer NOT NULL DEFAULT 1;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS category text;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS owner_id text;
+-- The vendor the user typed on the Approved listings page. Never filled from a source page.
+ALTER TABLE products ADD COLUMN IF NOT EXISTS vendor text;
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS usage text NOT NULL DEFAULT '{}';
 ALTER TABLE images ADD COLUMN IF NOT EXISTS added bigserial;
 ALTER TABLE videos ADD COLUMN IF NOT EXISTS added bigserial;

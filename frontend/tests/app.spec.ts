@@ -387,7 +387,7 @@ test.describe("the required tests", () => {
     // Reorder and edit on the Listing tab.
     const reordered = [...imageIds].reverse();
     const patch = await request.patch(`/api/products/${id}`, {
-      data: { name: "Steel Bottle 750ml", sku: "BOTTLE-750", price: "24.99", cost: "9.50", description: "Great bottle.\n- <b>Steel</b> body\n- Screw lid", imageIds: reordered, videoIds: [youtube.id, fileVideo.id, vimeo.id] },
+      data: { name: "Steel Bottle 750ml", sku: "BOTTLE-750", price: "24.99", cost: "9.50", vendor: "FynkTech", description: "Great bottle.\n- <b>Steel</b> body\n- Screw lid", imageIds: reordered, videoIds: [youtube.id, fileVideo.id, vimeo.id] },
     });
     expect(patch.status(), await patch.text()).toBe(200);
 
@@ -399,8 +399,8 @@ test.describe("the required tests", () => {
     const input = state.products[0].input;
     expect(input.status).toBe("DRAFT");
     expect(input.title).toBe("Steel Bottle 750ml");
-    // No seller name can reach the vendor field.
-    expect(input).not.toHaveProperty("vendor");
+    // The vendor is what the user typed. No seller name can reach it.
+    expect(input.vendor).toBe("FynkTech");
     expect(JSON.stringify(input)).not.toContain("Shop GOOD");
     // Description is escaped HTML.
     expect(input.descriptionHtml).toBe("<p>Great bottle.</p><ul><li>&lt;b&gt;Steel&lt;/b&gt; body</li><li>Screw lid</li></ul>");
@@ -684,13 +684,13 @@ test.describe("the Template page preview", () => {
 });
 
 test.describe("the Classic product page", () => {
-  test("shows every section of the page in its preview, and a push adds only its seven new files", async ({ page, request }) => {
+  test("shows every section of the page in its preview, and a push adds only its eight new files", async ({ page, request }) => {
     await mockSet({ scopes: ["write_products", "write_inventory", "write_themes"] });
     const before = (await mockState()).themes[0].files;
     await page.goto("/template");
     const card = page.getByTestId("template-classic");
     await expect(card).toContainText("Classic product page");
-    await expect(card).toContainText("7 files");
+    await expect(card).toContainText("8 files");
 
     await card.getByTestId("template-preview").click();
     const frame = page.getByTestId("rendered-preview").frameLocator("iframe");
@@ -704,6 +704,10 @@ test.describe("the Classic product page", () => {
     await expect(frame.locator(".au-why h2")).toHaveText("Combined Design");
     await expect(frame.locator(".au-why details")).toHaveCount(4);
     await expect(frame.locator(".au-stats div")).toHaveCount(3);
+    // "Why Choose Us?": the product's own rows, with its photo in our column.
+    await expect(frame.locator(".au-cmp h2")).toHaveText("Why Choose Us?");
+    await expect(frame.locator(".au-cmp tbody tr")).toHaveCount(4);
+    await expect(frame.locator(".au-cmp thead .au-cmp__us img")).toHaveAttribute("src", "/template-preview/hood-1.jpg");
     await expect(frame.locator(".au-ing li")).toHaveCount(3);
     await expect(frame.locator(".au-steps article")).toHaveCount(3);
     await expect(frame.locator(".au-faq details")).toHaveCount(4);
@@ -729,6 +733,7 @@ test.describe("the Classic product page", () => {
     const theme = (await mockState()).themes[0];
     for (const [filename, checksum] of Object.entries(before)) expect(theme.files[filename]).toBe(checksum);
     expect(Object.keys(theme.files).filter((filename) => filename.includes("fynk-classic")).sort()).toEqual([
+      "sections/fynk-classic-compare.liquid",
       "sections/fynk-classic-faq.liquid",
       "sections/fynk-classic-features.liquid",
       "sections/fynk-classic-hero.liquid",
@@ -812,6 +817,58 @@ test.describe("the Template cards", () => {
       await page.mouse.move(2, 2);
       await expect.poll(async () => Math.abs(await offset()), { timeout: 8_000 }).toBeLessThan(1);
     }
+  });
+});
+
+test.describe("the Entire store template page", () => {
+  test("sits under the Product page template in the sidebar, not clickable for now", async ({ page }) => {
+    await page.goto("/");
+    const links = await page.locator(".sidebar-nav .nav-link .nav-link-label").allInnerTexts();
+    const names = links.map((text) => text.trim());
+    expect(names.indexOf("Product page template")).toBe(names.indexOf("Dashboard") + 1);
+    expect(names.indexOf("Entire store template")).toBe(names.indexOf("Product page template") + 1);
+    await expect(page.getByRole("link", { name: "Entire store template" })).toHaveCount(0);
+    const item = page.getByTestId("nav-disabled");
+    await expect(item).toContainText("Entire store template");
+    await expect(item).toHaveAttribute("aria-disabled", "true");
+    await item.click();
+    await expect(page).toHaveURL(/\/$/);
+    await page.screenshot({ path: path.join(TEST_DIR, "screen-nav-disabled.png"), clip: { x: 0, y: 0, width: 300, height: 400 } });
+  });
+
+  test("previews the sample store with its pages, and a push replaces only the home, collection and list pages", async ({ page }) => {
+    await mockSet({ scopes: ["write_products", "write_inventory", "write_themes"] });
+    const before = (await mockState()).themes[0].files;
+    await page.goto("/store-template");
+    const card = page.getByTestId("store-template-simmer");
+    await expect(card).toContainText("Simmer store");
+
+    await card.getByTestId("template-preview").click();
+    const frame = page.getByTestId("rendered-preview").frameLocator("iframe");
+    await expect(frame.locator(".sm-hero__title").first()).toBeAttached();
+    await expect(frame.locator('a[href="/collections/blenders"]').first()).toBeAttached();
+    await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
+
+    let question = "";
+    page.once("dialog", (dialog) => {
+      question = dialog.message();
+      void dialog.accept();
+    });
+    await card.getByTestId("template-push").click();
+    const result = card.getByTestId("template-push-result");
+    await expect(result).toContainText("Set up in your store", { timeout: 90_000 });
+    expect(question).toContain("Your product page and your products do not change");
+    await expect(result.getByRole("link", { name: "View store" })).toHaveAttribute("href", "https://mock-store.myshopify.com/");
+    await page.screenshot({ path: path.join(TEST_DIR, "screen-store-template.png"), fullPage: true });
+
+    const state = await mockState();
+    const files = state.themes[0].files;
+    expect(files["templates/product.json"]).toBe(before["templates/product.json"]);
+    for (const name of ["templates/index.json", "templates/collection.json", "templates/list-collections.json", "templates/product.fynk-simmer.json", "sections/fynk-simmer-header.liquid"]) {
+      expect(files[name]).toBeTruthy();
+    }
+    expect(files["layout/theme.liquid"]).toBe(before["layout/theme.liquid"]);
+    expect(state.shopMetafields.map((field) => `${field.namespace}.${field.key}`)).toEqual(["fynk.store_generation"]);
   });
 });
 

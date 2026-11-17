@@ -1,0 +1,84 @@
+{%- assign store_gen = shop.metafields.fynk.store_generation.value -%}
+{%- assign ht = store_gen.home_page.text -%}
+{%- assign hi = store_gen.home_page.images -%}
+{%- assign homeData = section.settings.homeData -%}
+{%- if ht == blank and homeData.text != blank -%}{%- assign ht = homeData.text -%}{%- endif -%}
+{%- if hi == blank and homeData.images != blank -%}{%- assign hi = homeData.images -%}{%- endif -%}
+{%- capture logos -%}
+  {%- for block in section.blocks -%}
+    {%- if block.settings.logo != blank -%}
+      <div class="sm-br__item" {{ block.shopify_attributes }}>
+        {%- if block.settings.link != blank -%}<a href="{{ block.settings.link }}" aria-label="{{ block.settings.name | escape }}">{%- endif -%}
+        {%- render 'fynk-simmer-img', src: block.settings.logo, alt: block.settings.name, width: 400, lazy: true -%}
+        {%- if block.settings.link != blank -%}</a>{%- endif -%}
+      </div>
+    {%- endif -%}
+  {%- endfor -%}
+  {%- for i in (1..8) -%}
+    {%- assign logo_key = 'brand_logo_' | append: i -%}
+    {%- if hi[logo_key] != blank -%}
+      <div class="sm-br__item">{%- render 'fynk-simmer-img', src: hi[logo_key], alt: '', width: 400, lazy: true -%}</div>
+    {%- endif -%}
+  {%- endfor -%}
+{%- endcapture -%}
+{%- capture sm_html -%}
+{%- if ht.brands_quote != blank or logos != blank -%}
+<section class="sm-br{% if logos == blank %} sm-br--quote{% endif %}">
+  {%- if ht.brands_quote != blank -%}
+    <div class="sm-wrap sm-br__copy">
+      {%- if ht.brands_kicker != blank -%}<p class="sm-br__kick" data-sm-reveal style="--sm-delay: .1s">{{ ht.brands_kicker }}</p>{%- endif -%}
+      <p class="sm-br__quote" data-sm-reveal style="--sm-delay: .2s">&ldquo;{{ ht.brands_quote }}&rdquo;</p>
+    </div>
+  {%- endif -%}
+  {%- if logos != blank -%}
+    <div class="sm-fluid sm-br__logos" data-sm-rail data-sm-auto="5000">
+      <div class="sm-rail__track" data-sm-track data-sm-speed="500">{{ logos }}</div>
+    </div>
+  {%- endif -%}
+</section>
+{%- endif -%}
+<style>
+  .sm .sm-br { padding-block: 120px; background: var(--sm-band); }
+  .sm .sm-br__copy { text-align: center; }
+  .sm .sm-br__kick { margin: 0 8px 20px; font-size: 11.52px; line-height: 17.28px; text-transform: uppercase; color: var(--sm-ink); }
+  .sm .sm-br__quote { max-width: 570px; margin: 0 auto; font-size: 17.28px; line-height: 25.92px; color: var(--sm-ink); }
+  .sm .sm-br__copy + .sm-br__logos { margin-top: 65px; }
+  .sm .sm-br .sm-rail__track { --sm-gap: 30px; --sm-col: calc((100% - 120px) / 5); align-items: center; }
+  .sm .sm-br__item { display: flex; align-items: center; justify-content: center; height: 42px; border: 1px solid transparent; transition: all .3s; }
+  .sm .sm-br__item img { max-height: 40px; width: auto; max-width: 100%; object-fit: contain; opacity: .2; transition: opacity .3s; }
+  .sm .sm-br__item:hover img { opacity: 1; animation: sm-nudge 1.2s linear; }
+  @media (min-width: 1500px) { .sm .sm-br .sm-rail__track { --sm-col: calc((100% - 150px) / 6); } }
+  @media (max-width: 1199px) { .sm .sm-br { padding-block: 100px; } }
+  @media (max-width: 991px) {
+    .sm .sm-br { padding-block: 80px; }
+    .sm .sm-br .sm-rail__track { --sm-col: calc((100% - 90px) / 4); }
+  }
+  @media (max-width: 767px) {
+    .sm .sm-br { padding-block: 60px; }
+    .sm .sm-br__copy + .sm-br__logos { margin-top: 40px; }
+    .sm .sm-br .sm-rail__track { --sm-col: calc((100% - 30px) / 2); }
+    .sm .sm-br__item { height: auto; padding: 0 10px; }
+  }
+</style>
+{%- endcapture -%}
+{%- render 'fynk-simmer-wrap', html: sm_html -%}
+
+{% schema %}
+{
+  "name": "Simmer Brands",
+  "tag": "section",
+  "settings": [],
+  "blocks": [
+    {
+      "type": "logo",
+      "name": "Logo",
+      "settings": [
+        { "type": "image_picker", "id": "logo", "label": "Logo" },
+        { "type": "text", "id": "name", "label": "Brand name" },
+        { "type": "url", "id": "link", "label": "Link" }
+      ]
+    }
+  ],
+  "presets": [{ "name": "Simmer Brands" }]
+}
+{% endschema %}

@@ -1,0 +1,293 @@
+{%- assign store_gen = shop.metafields.fynk.store_generation.value -%}
+{%- assign ht = store_gen.home_page.text -%}
+{%- assign homeData = section.settings.homeData -%}
+{%- if ht == blank and homeData.text != blank -%}{%- assign ht = homeData.text -%}{%- endif -%}
+{%- assign current = product.selected_or_first_available_variant | default: product.variants[0] -%}
+{%- assign rating = product.metafields.reviews.rating.value.rating | default: 0 -%}
+{%- assign rating_count = product.metafields.reviews.rating_count.value | default: 0 -%}
+{%- assign shipping_tab = shop.shipping_policy.body | default: homeData.demo_shipping_tab -%}
+{%- assign returns_tab = shop.refund_policy.body | default: homeData.demo_returns_tab -%}
+{%- assign benefit_icons = 'truck,card,cash,shield' | split: ',' -%}
+{%- capture sm_html -%}
+<section class="sm-pd" data-sm-product>
+  <div class="sm-wrap">
+    <p class="sm-crumbs sm-pd__crumbs"><a href="{{ routes.root_url | default: '/' }}">{{ ht.label_home | default: 'Home' }}</a><i aria-hidden="true"></i><span>{{ product.title }}</span></p>
+    <div class="sm-pd__main">
+      <div class="sm-pd__gallery">
+        <div class="sm-pd__stage">
+          {%- for media in product.media -%}
+            <div class="sm-pd__shot{% if forloop.first %} is-on{% endif %}" data-sm-shot data-media-id="{{ media.id }}">
+              {%- render 'fynk-simmer-img', src: media.preview_image, alt: product.title, width: 1400 -%}
+            </div>
+          {%- endfor -%}
+        </div>
+        {%- if product.media.size > 1 -%}
+          <div class="sm-pd__thumbs">
+            {%- for media in product.media -%}
+              <button class="sm-pd__thumb{% if forloop.first %} is-on{% endif %}" type="button" aria-label="{{ ht.label_show_image | default: 'Show image' | escape }} {{ forloop.index }}" data-sm-thumb="{{ forloop.index0 }}">
+                {%- render 'fynk-simmer-img', src: media.preview_image, alt: '', width: 300, lazy: true -%}
+              </button>
+            {%- endfor -%}
+          </div>
+        {%- endif -%}
+      </div>
+
+      <div class="sm-pd__info">
+        <h1 class="sm-pd__title">{{ product.title }}</h1>
+        <p class="sm-pd__review">
+          <span class="sm-stars" style="--sm-rate: {{ rating | times: 20 }}%" role="img" aria-label="{{ rating }} / 5"></span>
+          <span>({{ rating_count }})</span>
+        </p>
+        <p class="sm-pd__price"><span data-sm-price>{{ current.price | default: product.price | money }}</span><s data-sm-compare{% unless current.compare_at_price > current.price %} hidden{% endunless %}>{{ current.compare_at_price | money }}</s></p>
+        {%- assign summary = product.description | replace: '</', ' </' | strip_html | truncatewords: 42 -%}
+        {%- if summary != blank -%}<p class="sm-pd__summary">{{ summary }}</p>{%- endif -%}
+
+        <dl class="sm-pd__facts">
+          <div><dt>{{ ht.label_available | default: 'Available' }}:</dt><dd class="sm-pd__stock" data-sm-stock data-in="{{ ht.label_in_stock | default: 'In Stock' | escape }}" data-out="{{ ht.label_out_of_stock | default: 'Out of Stock' | escape }}"><span data-sm-stock-text>{%- if current.available -%}{{ ht.label_in_stock | default: 'In Stock' }}{%- else -%}{{ ht.label_out_of_stock | default: 'Out of Stock' }}{%- endif -%}</span>{%- render 'fynk-simmer-icon', name: 'checkbox', size: 16, stroke: 1.4 -%}</dd></div>
+          {%- if product.tags.size > 0 -%}<div><dt>{{ ht.label_tags | default: 'Tags' }}:</dt><dd>{{ product.tags | join: ', ' }}</dd></div>{%- endif -%}
+          <div data-sm-sku-row{% if current.sku == blank %} hidden{% endif %}><dt>SKU:</dt><dd data-sm-sku>{{ current.sku }}</dd></div>
+          {%- if product.type != blank -%}<div><dt>{{ ht.label_category | default: 'Category' }}:</dt><dd>{{ product.type }}</dd></div>{%- endif -%}
+        </dl>
+
+        {%- form 'product', product, class: 'sm-pd__form' -%}
+          <input type="hidden" name="id" value="{{ current.id }}" data-sm-variant-id>
+          {%- unless product.has_only_default_variant -%}
+            {%- for option in product.options_with_values -%}
+              <fieldset class="sm-pd__option" data-sm-option="{{ forloop.index0 }}">
+                <legend>{{ option.name }}: <b data-sm-option-value>{{ option.selected_value }}</b></legend>
+                <div class="sm-pills">
+                  {%- for value in option.values -%}
+                    <label class="sm-pill sm-pd__pill{% if value == option.selected_value %} is-on{% endif %}">
+                      <input type="radio" name="sm-option-{{ section.id }}-{{ forloop.parentloop.index0 }}" value="{{ value | escape }}"{% if value == option.selected_value %} checked{% endif %}>
+                      <span>{{ value }}</span>
+                    </label>
+                  {%- endfor -%}
+                </div>
+              </fieldset>
+            {%- endfor -%}
+          {%- endunless -%}
+
+          <p class="sm-pd__label">{{ ht.label_quantity | default: 'Quantity' }}:</p>
+          <div class="sm-pd__buy">
+            <div class="sm-pd__qty">
+              <button type="button" aria-label="Decrease quantity" data-sm-step="-1">−</button>
+              <input type="number" name="quantity" value="1" min="1" aria-label="{{ ht.label_quantity | default: 'Quantity' | escape }}">
+              <button type="button" aria-label="Increase quantity" data-sm-step="1">+</button>
+            </div>
+            <button class="sm-btn sm-pd__add" type="submit" data-sm-add{% unless current.available %} disabled{% endunless %} data-label-add="{{ ht.label_add_to_bag | default: 'Add To Bag' | escape }}" data-label-out="{% render 'fynk-simmer-ui-string', key: 'sold_out' %}">{%- if current.available -%}{{ ht.label_add_to_bag | default: 'Add To Bag' }}{%- else -%}{% render 'fynk-simmer-ui-string', key: 'sold_out' %}{%- endif -%}</button>
+            <button class="sm-pd__heart" type="button" aria-pressed="false" aria-label="{{ ht.label_wishlist | default: 'Wishlist' | escape }}: {{ product.title | escape }}" data-sm-wish="{{ product.url }}" data-title="{{ product.title | escape }}" data-image="{% if product.featured_image contains '/' %}{{ product.featured_image }}{% else %}{{ product.featured_image | image_url: width: 200 }}{% endif %}">{%- render 'fynk-simmer-icon', name: 'heart', size: 18 -%}</button>
+          </div>
+          <div class="sm-pd__now">
+            {%- if homeData == blank -%}{{ form | payment_button }}{%- else -%}<button class="sm-btn sm-btn--line" type="button" data-sm-demo-buy>{{ ht.label_buy_now | default: 'Buy It Now' }}</button>{%- endif -%}
+          </div>
+        {%- endform -%}
+
+        <ul class="sm-pd__links">
+          <li><button type="button" data-sm-share>{%- render 'fynk-simmer-icon', name: 'share', size: 16 -%}{{ ht.label_share | default: 'Share' }}</button></li>
+          <li><a href="{{ ht.contact_url | default: '/pages/contact' }}">{%- render 'fynk-simmer-icon', name: 'help', size: 16 -%}{{ ht.label_ask | default: 'Ask A Question' }}</a></li>
+          <li><a href="{{ ht.faq_url | default: '/pages/faq' }}">{%- render 'fynk-simmer-icon', name: 'chat', size: 16 -%}{{ ht.label_faq | default: 'FAQ' }}</a></li>
+        </ul>
+
+        {%- if ht.policy_1_title != blank -%}
+          <div class="sm-pd__benefits">
+            <p class="sm-pd__benefits-head"><span>{{ ht.label_benefits | default: 'The Benefits Of Choosing Us' }}</span></p>
+            <ul>
+              {%- for i in (1..4) -%}
+                {%- assign title_key = 'policy_' | append: i | append: '_title' -%}
+                {%- assign icon_at = i | minus: 1 -%}
+                {%- if ht[title_key] != blank -%}<li>{%- render 'fynk-simmer-icon', name: benefit_icons[icon_at], size: 32, stroke: 1 -%}<span>{{ ht[title_key] }}</span></li>{%- endif -%}
+              {%- endfor -%}
+            </ul>
+          </div>
+        {%- endif -%}
+
+        {%- if section.settings.note_1 != blank or section.settings.note_2 != blank -%}
+          <ul class="sm-pd__notes">
+            {%- if section.settings.note_1 != blank -%}<li>{%- render 'fynk-simmer-icon', name: 'box', size: 30, stroke: 1 -%}{{ section.settings.note_1 }}</li>{%- endif -%}
+            {%- if section.settings.note_2 != blank -%}<li>{%- render 'fynk-simmer-icon', name: 'truck', size: 30, stroke: 1 -%}{{ section.settings.note_2 }}</li>{%- endif -%}
+          </ul>
+        {%- endif -%}
+      </div>
+    </div>
+
+    <div class="sm-pd__tabs" data-sm-tabs>
+      <div class="sm-pd__tablist" role="tablist">
+        <button class="is-on" type="button" role="tab" aria-selected="true" data-sm-tab="0">{{ ht.label_description | default: 'Description' }}</button>
+        {%- if shipping_tab != blank -%}<button type="button" role="tab" aria-selected="false" data-sm-tab="1">{{ ht.label_shipping_tab | default: 'Shipping Policy' }}</button>{%- endif -%}
+        {%- if returns_tab != blank -%}<button type="button" role="tab" aria-selected="false" data-sm-tab="2">{{ ht.label_returns_tab | default: 'Returns' }}</button>{%- endif -%}
+      </div>
+      <div class="sm-pd__panel" role="tabpanel" data-sm-panel="0">{{ product.description }}</div>
+      {%- if shipping_tab != blank -%}<div class="sm-pd__panel" role="tabpanel" data-sm-panel="1" hidden>{{ shipping_tab }}</div>{%- endif -%}
+      {%- if returns_tab != blank -%}<div class="sm-pd__panel" role="tabpanel" data-sm-panel="2" hidden>{{ returns_tab }}</div>{%- endif -%}
+    </div>
+  </div>
+  <script type="application/json" data-sm-variants>{{ product.variants | json }}</script>
+</section>
+
+<style>
+  .sm .sm-pd { padding-block: 26px 0; background: #fff; color: var(--sm-text); }
+  .sm .sm-pd__crumbs { justify-content: flex-start; margin: 0 0 24px; }
+  .sm .sm-pd__main { display: grid; grid-template-columns: minmax(0, 690fr) minmax(0, 647fr); gap: 73px; align-items: start; }
+  .sm .sm-pd__stage { position: relative; aspect-ratio: 690 / 890; overflow: hidden; border-radius: 5px; background: var(--sm-tile); }
+  .sm .sm-pd__shot { position: absolute; inset: 0; opacity: 0; visibility: hidden; transition: opacity .35s ease, visibility .35s; }
+  .sm .sm-pd__shot.is-on { opacity: 1; visibility: visible; }
+  .sm .sm-pd__shot img { width: 100%; height: 100%; object-fit: cover; }
+  .sm .sm-pd__thumbs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+  .sm .sm-pd__thumb { aspect-ratio: 107 / 138; padding: 0; overflow: hidden; border: 1px solid transparent; border-radius: 5px; background: var(--sm-tile); cursor: pointer; transition: border-color .2s ease; }
+  .sm .sm-pd__thumb.is-on, .sm .sm-pd__thumb:hover { border-color: var(--sm-accent); }
+  .sm .sm-pd__thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .sm .sm-pd__info { position: sticky; top: 80px; min-width: 0; }
+  .sm .sm-pd__title { font-size: 22.08px; line-height: 33.12px; font-weight: 500 !important; color: var(--sm-ink); }
+  .sm .sm-pd__review { display: flex; align-items: center; margin-top: 15px; font-size: 13.44px; line-height: 20px; color: var(--sm-text); }
+  .sm .sm-pd__review .sm-stars { margin: 0; }
+  .sm .sm-pd__price { display: flex; align-items: baseline; gap: 12px; margin-top: 20px; font-size: 24px; line-height: 36px; font-weight: 800; color: var(--sm-ink); }
+  .sm .sm-pd__price s { font-size: 15px; font-weight: 400; color: var(--sm-muted); text-decoration-color: #db0000; }
+  .sm .sm-pd__summary { margin-top: 11px; font-size: 12.48px; line-height: 21.2px; }
+  .sm .sm-pd__facts { margin: 36px 0 0; font-size: 12px; line-height: 18px; }
+  .sm .sm-pd__facts > div { display: grid; grid-template-columns: 130px minmax(0, 1fr); margin-bottom: 9px; }
+  .sm .sm-pd__facts > div[hidden] { display: none; }
+  .sm .sm-pd__facts dt { font-weight: 700; text-transform: uppercase; color: var(--sm-ink); }
+  .sm .sm-pd__facts dd { margin: 0; color: var(--sm-text); }
+  .sm .sm-pd__stock { display: flex; align-items: center; gap: 7px; color: #6bb853 !important; font-weight: 500; text-transform: uppercase; font-size: 11px; line-height: 16.5px; }
+  .sm .sm-pd__stock.is-out { color: #db0000 !important; }
+  .sm .sm-pd__form { margin: 37px 0 0; }
+  .sm .sm-pd__option { margin: 0 0 26px; padding: 0; border: 0; }
+  .sm .sm-pd__option legend, .sm .sm-pd__label { padding: 0; margin-bottom: 15px; font-size: 12px; line-height: 18px; font-weight: 700; text-transform: uppercase; color: var(--sm-ink); }
+  .sm .sm-pd__option legend b { font-weight: 700; }
+  .sm .sm-pd__pill { display: inline-grid; place-items: center; }
+  .sm .sm-pd__pill input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .sm .sm-pd__pill:has(input:focus-visible) { outline: 2px solid var(--sm-ink); outline-offset: 2px; }
+  .sm .sm-pd__pill.is-out { opacity: .4; text-decoration: line-through; }
+  .sm .sm-pd__buy { display: grid; grid-template-columns: 110px minmax(0, 1fr) 50px; gap: 10px; align-items: center; }
+  .sm .sm-pd__qty { display: grid; grid-template-columns: 28px minmax(0, 1fr) 28px; align-items: center; height: 50px; border: 1px solid var(--sm-line); border-radius: 100px; }
+  .sm .sm-pd__qty button { height: 100%; padding: 0; border: 0; background: none; font-size: 18px; color: #b4b4b4; cursor: pointer; transition: color .2s ease; }
+  .sm .sm-pd__qty button:hover { color: var(--sm-ink); }
+  .sm .sm-pd__qty input { width: 100%; padding: 0; border: 0; background: none; text-align: center; font-size: 12px; font-weight: 700; color: #343434; appearance: textfield; -moz-appearance: textfield; }
+  .sm .sm-pd__qty input::-webkit-outer-spin-button, .sm .sm-pd__qty input::-webkit-inner-spin-button { appearance: none; margin: 0; }
+  .sm .sm-pd__add { width: 100%; min-width: 0; height: 50px; background: #ededed; color: #222; }
+  .sm .sm-pd__heart { width: 50px; height: 50px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: #ededed; color: var(--sm-ink); cursor: pointer; transition: background-color .25s ease, color .25s ease; }
+  .sm .sm-pd__heart:hover { background: var(--sm-accent); color: #fff; }
+  .sm .sm-pd__heart svg { fill: currentColor; }
+  .sm .sm-pd__now { margin-top: 11px; }
+  .sm .sm-pd__now .sm-btn { width: 100%; height: 50px; box-shadow: 0 2px 8px rgb(0 0 0 / .06); }
+  .sm .sm-pd__now :is(.shopify-payment-button__button) { min-height: 50px; border-radius: 50px; overflow: hidden; }
+  .sm .sm-pd__links { display: flex; flex-wrap: wrap; gap: 12px 30px; margin-top: 27px; font-size: 11.52px; line-height: 17px; font-weight: 700; text-transform: uppercase; color: var(--sm-ink); }
+  .sm .sm-pd__links :is(a, button) { display: inline-flex; align-items: center; gap: 8px; padding: 0; border: 0; background: none; font-weight: 700; text-transform: uppercase; color: var(--sm-ink); cursor: pointer; transition: color .2s ease; }
+  .sm .sm-pd__links :is(a, button):hover { color: var(--sm-accent); }
+  .sm .sm-pd__benefits { position: relative; margin-top: 66px; padding: 30px 14px 22px; border: 1px solid var(--sm-line); border-radius: 5px; }
+  .sm .sm-pd__benefits-head { position: absolute; inset-inline: 0; top: -9px; text-align: center; }
+  .sm .sm-pd__benefits-head span { padding-inline: 12px; background: #fff; font-size: 12px; line-height: 18px; font-weight: 700; text-transform: uppercase; color: var(--sm-ink); }
+  .sm .sm-pd__benefits ul { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .sm .sm-pd__benefits li { display: grid; justify-items: center; gap: 14px; font-size: 10px; line-height: 16px; font-weight: 600; text-align: center; text-transform: uppercase; color: var(--sm-ink); }
+  .sm .sm-pd__notes { margin-top: 48px; font-size: 14px; line-height: 21px; color: #535353; }
+  .sm .sm-pd__notes li { display: flex; align-items: center; gap: 13px; margin-bottom: 25px; }
+  .sm .sm-pd__tablist { display: flex; flex-wrap: wrap; gap: 14px 68px; margin-top: 100px; }
+  .sm .sm-pd__tablist button { padding: 0; border: 0; background: none; font-size: 23.04px; line-height: 23.04px; font-weight: 600; color: var(--sm-ink); cursor: pointer; transition: color .2s ease; }
+  .sm .sm-pd__tablist button:hover, .sm .sm-pd__tablist button.is-on { color: var(--sm-accent); }
+  .sm .sm-pd__panel { margin-top: 52px; padding-block-end: 117px; font-size: 14px; line-height: 24.5px; color: var(--sm-text); }
+  .sm .sm-pd__panel :is(p, ul, ol) { margin-block-end: 12px; }
+  .sm .sm-pd__panel ul { padding-inline-start: 22px; list-style: disc; }
+  .sm .sm-pd__panel h3 { margin-block: 9px 5px; font-size: 17.28px; line-height: 25.92px; font-weight: 500; color: var(--sm-text); }
+  @media (max-width: 1024px) {
+    .sm .sm-pd__main { grid-template-columns: 1fr; gap: 30px; }
+    .sm .sm-pd__info { position: static; }
+    .sm .sm-pd__tablist { margin-top: 50px; gap: 12px 30px; }
+    .sm .sm-pd__tablist button { font-size: 18px; line-height: 26px; }
+  }
+  @media (max-width: 749px) {
+    .sm .sm-pd__buy { grid-template-columns: 104px minmax(0, 1fr) 44px; gap: 8px; }
+    .sm .sm-pd__heart { width: 44px; height: 44px; }
+    .sm .sm-pd__benefits ul { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 10px; }
+  }
+</style>
+<script>
+  (function () {
+    document.querySelectorAll("[data-sm-product]:not([data-ready])").forEach(function (root) {
+      root.dataset.ready = "1";
+      var shots = root.querySelectorAll("[data-sm-shot]"), thumbs = root.querySelectorAll("[data-sm-thumb]");
+      function showShot(n) {
+        shots.forEach(function (s, i) { s.classList.toggle("is-on", i === n); });
+        thumbs.forEach(function (t, i) { t.classList.toggle("is-on", i === n); });
+      }
+      thumbs.forEach(function (t, i) { t.addEventListener("click", function () { showShot(i); }); });
+
+      var qty = root.querySelector('[name="quantity"]');
+      root.querySelectorAll("[data-sm-step]").forEach(function (b) {
+        b.addEventListener("click", function () { qty.value = Math.max(1, (Number(qty.value) || 1) + Number(b.dataset.smStep)); });
+      });
+
+      root.querySelectorAll("[data-sm-tab]").forEach(function (tab) {
+        tab.addEventListener("click", function () {
+          root.querySelectorAll("[data-sm-tab]").forEach(function (t) { var on = t === tab; t.classList.toggle("is-on", on); t.setAttribute("aria-selected", on ? "true" : "false"); });
+          root.querySelectorAll("[data-sm-panel]").forEach(function (p) { p.hidden = p.dataset.smPanel !== tab.dataset.smTab; });
+        });
+      });
+
+      var share = root.querySelector("[data-sm-share]");
+      if (share) share.addEventListener("click", function () {
+        var url = window.location.href;
+        if (navigator.share) { navigator.share({ url: url, title: document.title }).catch(function () {}); return; }
+        if (navigator.clipboard) navigator.clipboard.writeText(url).then(function () { if (window.__sm) window.__sm.toast("Link copied"); });
+      });
+
+      var data = root.querySelector("[data-sm-variants]"), variants = [];
+      try { variants = JSON.parse(data.textContent) || []; } catch (e) {}
+      var fields = root.querySelectorAll("[data-sm-option]");
+      if (!fields.length || !variants.length) return;
+      var idInput = root.querySelector("[data-sm-variant-id]"), add = root.querySelector(".sm-pd__add");
+      var price = root.querySelector("[data-sm-price]"), compare = root.querySelector("[data-sm-compare]");
+      var stock = root.querySelector("[data-sm-stock]"), sku = root.querySelector("[data-sm-sku]"), skuRow = root.querySelector("[data-sm-sku-row]");
+      function money(cents) { return window.__sm ? window.__sm.money(cents) : (cents / 100).toFixed(2); }
+      function chosen() { return Array.prototype.map.call(fields, function (f) { var c = f.querySelector("input:checked"); return c ? c.value : null; }); }
+      function paint() {
+        var values = chosen();
+        fields.forEach(function (f, i) {
+          var label = f.querySelector("[data-sm-option-value]");
+          if (label) label.textContent = values[i];
+          f.querySelectorAll(".sm-pd__pill").forEach(function (p) {
+            var input = p.querySelector("input");
+            p.classList.toggle("is-on", input.checked);
+            var test = values.slice(); test[i] = input.value;
+            var exists = variants.some(function (v) { return v.available && (v.options || []).every(function (o, x) { return o === test[x]; }); });
+            p.classList.toggle("is-out", !exists);
+          });
+        });
+        var variant = variants.filter(function (v) { return (v.options || []).every(function (o, x) { return o === values[x]; }); })[0];
+        var ok = Boolean(variant && variant.available);
+        add.disabled = !ok;
+        add.textContent = ok ? add.dataset.labelAdd : add.dataset.labelOut;
+        if (stock) { stock.querySelector("[data-sm-stock-text]").textContent = ok ? stock.dataset.in : stock.dataset.out; stock.classList.toggle("is-out", !ok); }
+        if (!variant) return;
+        idInput.value = variant.id;
+        price.textContent = money(variant.price);
+        var discounted = variant.compare_at_price > variant.price;
+        compare.hidden = !discounted;
+        if (discounted) compare.textContent = money(variant.compare_at_price);
+        if (sku) sku.textContent = variant.sku || "";
+        if (skuRow) skuRow.hidden = !variant.sku;
+        if (variant.featured_media) {
+          shots.forEach(function (s, i) { if (s.dataset.mediaId === String(variant.featured_media.id)) showShot(i); });
+        }
+        if (variant.id && window.location.search.indexOf("variant=") > -1 && window.history.replaceState) {
+          var url = new URL(window.location.href); url.searchParams.set("variant", variant.id); window.history.replaceState({}, "", url);
+        }
+      }
+      fields.forEach(function (f) { f.addEventListener("change", paint); });
+      paint();
+    });
+  })();
+</script>
+{%- endcapture -%}
+{%- render 'fynk-simmer-wrap', html: sm_html -%}
+
+{% schema %}
+{
+  "name": "Simmer Product",
+  "tag": "section",
+  "settings": [
+    { "type": "text", "id": "note_1", "label": "Delivery note", "info": "For example your real processing time." },
+    { "type": "text", "id": "note_2", "label": "Shipping note", "info": "For example your real shipping offer." }
+  ],
+  "presets": [{ "name": "Simmer Product" }]
+}
+{% endschema %}

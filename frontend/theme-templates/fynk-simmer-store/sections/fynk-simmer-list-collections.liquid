@@ -1,0 +1,68 @@
+{%- assign store_gen = shop.metafields.fynk.store_generation.value -%}
+{%- assign ht = store_gen.home_page.text -%}
+{%- assign homeData = section.settings.homeData -%}
+{%- if ht == blank and homeData.text != blank -%}{%- assign ht = homeData.text -%}{%- endif -%}
+{%- capture sm_html -%}
+<div class="sm-lc__head">
+  <h1>{{ page_title | default: ht.label_collections | default: 'Collections' }}</h1>
+  <p class="sm-crumbs"><a href="{{ routes.root_url | default: '/' }}">{{ ht.label_home | default: 'Home' }}</a><i aria-hidden="true"></i><span>{{ ht.label_collections | default: 'Collections' }}</span></p>
+</div>
+<section class="sm-lc">
+  <div class="sm-wrap">
+    {%- paginate collections by section.settings.per_page -%}
+      <ul class="sm-lc__grid">
+        {%- for c in collections -%}
+          {%- if c.handle != 'all' and c.handle != 'frontpage' -%}
+            <li data-sm-reveal>
+              <a class="sm-lc__tile" href="{{ c.url }}">
+                <span class="sm-lc__pic">{%- render 'fynk-simmer-img', src: c.featured_image, alt: c.title, width: 800, lazy: true -%}</span>
+                <span class="sm-lc__name">{{ c.title }}</span>
+              </a>
+            </li>
+          {%- endif -%}
+        {%- endfor -%}
+      </ul>
+      {%- if paginate.pages > 1 -%}
+        <nav class="sm-lc__pages" aria-label="Pagination">
+          {%- for part in paginate.parts -%}
+            {%- if part.is_link -%}<a href="{{ part.url }}">{{ part.title }}</a>{%- else -%}<span{% if part.title == paginate.current_page %} class="is-on" aria-current="page"{% endif %}>{{ part.title }}</span>{%- endif -%}
+          {%- endfor -%}
+        </nav>
+      {%- endif -%}
+    {%- endpaginate -%}
+  </div>
+</section>
+<style>
+  .sm .sm-lc__head { padding-block: 120px 60px; background: #fff; text-align: center; }
+  .sm .sm-lc__head h1 { font-size: 28.8px; line-height: 40px; font-weight: 800 !important; text-transform: uppercase; color: var(--sm-ink); }
+  .sm .sm-lc { padding-block-end: 120px; background: #fff; }
+  .sm .sm-lc__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px 30px; }
+  .sm .sm-lc__tile { display: block; color: var(--sm-ink); }
+  .sm .sm-lc__pic { display: block; aspect-ratio: 450 / 583; overflow: hidden; border-radius: 5px; background: var(--sm-tile); }
+  .sm .sm-lc__pic img { width: 100%; height: 100%; object-fit: cover; transition: transform .35s linear; }
+  .sm .sm-lc__tile:hover img { transform: scale(1.05); }
+  .sm .sm-lc__name { display: block; margin-top: 18px; font-size: 13.44px; line-height: 20px; font-weight: 800; text-align: center; text-transform: uppercase; color: var(--sm-ink); transition: color .2s ease; }
+  .sm .sm-lc__tile:hover .sm-lc__name { color: var(--sm-accent); }
+  .sm .sm-lc__pages { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 50px; font-size: 13.44px; }
+  .sm .sm-lc__pages :is(a, span) { min-width: 40px; height: 40px; display: grid; place-items: center; padding-inline: 8px; border: 1px solid var(--sm-line); border-radius: 3px; color: var(--sm-ink); }
+  .sm .sm-lc__pages .is-on { background: #000; border-color: #000; color: #fff; }
+  @media (max-width: 749px) {
+    .sm .sm-lc__head { padding-block: 44px 28px; }
+    .sm .sm-lc__head h1 { font-size: 22px; line-height: 30px; }
+    .sm .sm-lc { padding-block-end: 60px; }
+    .sm .sm-lc__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 10px; }
+  }
+</style>
+{%- endcapture -%}
+{%- render 'fynk-simmer-wrap', html: sm_html -%}
+
+{% schema %}
+{
+  "name": "Simmer Collection List",
+  "tag": "section",
+  "settings": [
+    { "type": "range", "id": "per_page", "label": "Collections per page", "min": 12, "max": 48, "step": 6, "default": 36 }
+  ],
+  "presets": [{ "name": "Simmer Collection List" }]
+}
+{% endschema %}

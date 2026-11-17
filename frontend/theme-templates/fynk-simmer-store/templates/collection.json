@@ -1,0 +1,30 @@
+{
+  "sections": {
+    "simmer-header": {
+      "type": "fynk-simmer-header",
+      "settings": {}
+    },
+    "simmer-collection": {
+      "type": "fynk-simmer-collection",
+      "settings": {
+        "per_page": 12
+      }
+    },
+    "simmer-policy": {
+      "type": "fynk-simmer-policy",
+      "settings": {
+        "row": true
+      }
+    },
+    "simmer-footer": {
+      "type": "fynk-simmer-footer",
+      "settings": {}
+    }
+  },
+  "order": [
+    "simmer-header",
+    "simmer-collection",
+    "simmer-policy",
+    "simmer-footer"
+  ]
+}

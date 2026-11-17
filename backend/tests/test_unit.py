@@ -233,11 +233,20 @@ PRODUCT = {"id": "12345678-aaaa", "name": "Steel Bottle", "sku": "PRD-0001", "pr
 
 
 def test_status_is_always_draft():
-    product_input = build_product_input(product={**PRODUCT, "status": "ACTIVE", "vendor": "SomeStore"}, image_sources=[], file_video_sources=[], external_videos=[])
+    product_input = build_product_input(product={**PRODUCT, "status": "ACTIVE"}, image_sources=[], file_video_sources=[], external_videos=[])
     assert product_input["status"] == "DRAFT"
+    # The source seller's name never reaches the vendor field.
     assert "vendor" not in product_input
     assert "SomeStore" not in json.dumps(product_input)
     assert product_input["variants"][0]["price"] == "0.00"
+
+
+def test_vendor_is_what_the_user_typed():
+    product_input = build_product_input(product={**PRODUCT, "vendor": "  FynkTech  "}, image_sources=[], file_video_sources=[], external_videos=[])
+    assert product_input["vendor"] == "FynkTech"
+    assert "SomeStore" not in json.dumps(product_input)
+    updated = build_product_input(product={**PRODUCT, "vendor": "FynkTech", "shopify_product_id": "gid://shopify/Product/1"}, image_sources=[], file_video_sources=[], external_videos=[], update=True)
+    assert updated["vendor"] == "FynkTech"
 
 
 def test_handles():
@@ -443,7 +452,7 @@ def test_saamano_is_three_new_files():
 
 
 @pytest.mark.parametrize("template_id, sections", [
-    ("classic", ["fynk-classic-faq", "fynk-classic-features", "fynk-classic-hero", "fynk-classic-special", "fynk-classic-stats", "fynk-classic-steps"]),
+    ("classic", ["fynk-classic-compare", "fynk-classic-faq", "fynk-classic-features", "fynk-classic-hero", "fynk-classic-special", "fynk-classic-stats", "fynk-classic-steps"]),
 ])
 def test_page_templates_are_only_new_files_and_never_touch_the_theme_or_another_app(template_id, sections):
     import re
@@ -598,6 +607,97 @@ def test_admin_token_push(shopify_env):
     state = shopify_env.state()
     assert state["oauthCalls"] == []
     assert all(c["token"] == "mock-token-admin" for c in state["graphql"])
+
+
+# ---------- entire store templates (mock server) ----------
+
+def _store():
+    from pla.templates import find_store_template, read_template_files
+
+    return find_store_template("simmer"), read_template_files("simmer")
+
+
+def test_the_store_design_takes_only_the_three_pages_it_lists_and_adds_the_rest_as_new_files():
+    from pla.shopify.theme import OWN_FILE
+
+    template, files = _store()
+    names = [f["filename"] for f in files]
+    taken = [n for n in names if not OWN_FILE.search(n)]
+    assert sorted(taken) == sorted(template["replaces"]) == ["templates/collection.json", "templates/index.json", "templates/list-collections.json"]
+    # The store's own product page is never in the push. The design's page is an extra one.
+    assert "templates/product.json" not in names
+    assert "templates/product.fynk-simmer.json" in names
+    assert all("roarr" not in f["value"].lower() for f in files if f["type"] == "TEXT")
+
+
+def test_every_part_the_store_design_points_to_ships_with_it():
+    import re
+
+    from pla.templates import read_store_content
+
+    _, files = _store()
+    by_name = {f["filename"]: f for f in files}
+    for name, file in by_name.items():
+        if name.startswith("templates/"):
+            for section in json.loads(file["value"])["sections"].values():
+                assert f"sections/{section['type']}.liquid" in by_name, name
+        if name.startswith(("sections/", "snippets/")):
+            for snippet in re.findall(r"render '([a-z-]+)'", file["value"]):
+                assert f"snippets/{snippet}.liquid" in by_name, (name, snippet)
+    pictures = read_store_content("simmer")["home_page"]["images"]
+    assert pictures and all(f"assets/{picture}" in by_name for picture in pictures.values())
+
+
+def test_pushing_the_store_design_keeps_the_product_page_and_everything_else(shopify_env):
+    from pla.shopify.theme import push_theme_template
+
+    template, files = _store()
+    shopify_env.set({"scopes": SCOPES, "themes": [{**shopify_env.state()["themes"][0], "files": {**shopify_env.state()["themes"][0]["files"], "templates/index.json": "old-home"}}]})
+    before = shopify_env.state()["themes"][0]["files"]
+    result = push_theme_template(template)
+    after = shopify_env.state()["themes"][0]["files"]
+    assert result["uploaded"] == len(files) and result["warnings"] == []
+    # The product page and every other file stay exactly as they were.
+    assert after["templates/product.json"] == before["templates/product.json"]
+    for filename, checksum in before.items():
+        if filename not in template["replaces"]:
+            assert after[filename] == checksum
+    by_name = {f["filename"]: f for f in files}
+    for filename in template["replaces"]:
+        assert after[filename] == by_name[filename]["md5"]
+    assert after["templates/product.fynk-simmer.json"] == by_name["templates/product.fynk-simmer.json"]["md5"]
+    # The sample text is saved under the store's own name and links to the store's own collections.
+    saved = shopify_env.state()["shopMetafields"]
+    assert [(m["namespace"], m["key"], m["type"]) for m in saved] == [("fynk", "store_generation", "json")]
+    text = json.loads(saved[0]["value"])["home_page"]["text"]
+    assert text["store_name"] == "Mock Store"
+    assert [text[f"collection_{i}"] for i in (1, 2, 3)] == ["kitchen", "garden", "kitchen"]
+
+
+def test_a_theme_with_no_product_page_gets_the_designs(shopify_env):
+    from pla.shopify.theme import push_theme_template
+
+    template, files = _store()
+    theme = shopify_env.state()["themes"][0]
+    shopify_env.set({"scopes": SCOPES, "themes": [{**theme, "files": {k: v for k, v in theme["files"].items() if k != "templates/product.json"}}]})
+    result = push_theme_template(template)
+    by_name = {f["filename"]: f for f in files}
+    assert shopify_env.state()["themes"][0]["files"]["templates/product.json"] == by_name["templates/product.fynk-simmer.json"]["md5"]
+    assert "no product page" in result["warnings"][0]
+
+
+def test_when_the_store_text_cannot_be_saved_no_theme_file_changes(shopify_env):
+    from pla.shopify.client import ShopifyError
+    from pla.shopify.theme import push_theme_template
+
+    template, _ = _store()
+    shopify_env.set({"scopes": SCOPES, "shopMetafieldError": "Access denied"})
+    before = shopify_env.state()["themes"][0]["files"]
+    with pytest.raises(ShopifyError, match="Nothing in your theme was changed"):
+        push_theme_template(template)
+    state = shopify_env.state()
+    assert state["themes"][0]["files"] == before
+    assert "UpsertThemeFiles" not in [c["name"] for c in state["graphql"]]
 
 
 # ---------- Saamano metafields ----------

@@ -1,0 +1,68 @@
+{%- assign store_gen = shop.metafields.fynk.store_generation.value -%}
+{%- assign ht = store_gen.home_page.text -%}
+{%- assign homeData = section.settings.homeData -%}
+{%- if ht == blank and homeData.text != blank -%}{%- assign ht = homeData.text -%}{%- endif -%}
+{%- assign icons = 'truck,card,cash,shield' | split: ',' -%}
+{%- assign url_1 = shop.shipping_policy.url | default: '/policies/shipping-policy' -%}
+{%- assign url_2 = shop.refund_policy.url | default: '/policies/refund-policy' -%}
+{%- assign url_3 = shop.terms_of_service.url | default: '/policies/terms-of-service' -%}
+{%- assign url_4 = '/pages/contact' -%}
+{%- assign urls = url_1 | append: '|' | append: url_2 | append: '|' | append: url_3 | append: '|' | append: url_4 | split: '|' -%}
+{%- capture sm_html -%}
+<section class="sm-pol{% if section.settings.row %} sm-pol--row{% endif %}">
+  <div class="sm-fluid sm-pol__grid">
+    {%- for i in (1..4) -%}
+      {%- assign title_key = 'policy_' | append: i | append: '_title' -%}
+      {%- assign text_key = 'policy_' | append: i | append: '_text' -%}
+      {%- assign link_key = 'policy_' | append: i | append: '_link' -%}
+      {%- assign at = i | minus: 1 -%}
+      {%- assign keep = true -%}
+      {%- if section.settings.row and i == 4 -%}{%- assign keep = false -%}{%- endif -%}
+      {%- if ht[title_key] != blank and keep -%}
+        <div class="sm-pol__item" data-sm-reveal style="--sm-delay: .{{ i }}s">
+          <span class="sm-pol__icon">{%- render 'fynk-simmer-icon', name: icons[at], size: 40, stroke: 1 -%}</span>
+          <div class="sm-pol__body">
+            <h3 class="sm-pol__title">{{ ht[title_key] }}</h3>
+            {%- if ht[text_key] != blank -%}<p class="sm-pol__text">{{ ht[text_key] }}</p>{%- endif -%}
+            {%- if ht[link_key] != blank -%}<a class="sm-go sm-pol__go" href="{{ urls[at] }}">{{ ht[link_key] }}{%- render 'fynk-simmer-icon', name: 'arrow', size: 14 -%}</a>{%- endif -%}
+          </div>
+        </div>
+      {%- endif -%}
+    {%- endfor -%}
+  </div>
+</section>
+<style>
+  .sm .sm-pol { padding-block-end: 120px; background: #fff; }
+  .sm .sm-pol__grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 30px; }
+  .sm .sm-pol__item { display: flex; align-items: flex-start; gap: 24px; }
+  .sm .sm-pol__icon { flex: none; display: block; width: 40px; height: 40px; color: var(--sm-ink); }
+  .sm .sm-pol__item:hover .sm-pol__icon { animation: sm-nudge 1.2s linear; }
+  .sm .sm-pol__body { min-width: 0; }
+  .sm .sm-pol__title { font-size: 15.36px; line-height: 23.04px; font-weight: 500 !important; color: var(--sm-ink); }
+  .sm .sm-pol__text { margin-top: 10px; font-size: 13.44px; line-height: 20.16px; color: var(--sm-text); }
+  .sm .sm-pol__go { margin-top: 20px; }
+  .sm .sm-pol--row { padding-block: 60px 80px; border-top: 1px solid var(--sm-line); }
+  .sm .sm-pol--row .sm-pol__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  @media (max-width: 1199px) { .sm .sm-pol { padding-block-end: 100px; } }
+  @media (max-width: 991px) { .sm .sm-pol { padding-block-end: 80px; } .sm .sm-pol__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px 24px; } }
+  @media (max-width: 767px) {
+    .sm .sm-pol, .sm .sm-pol--row { padding-block: 0 60px; }
+    .sm .sm-pol--row { padding-top: 40px; }
+    .sm .sm-pol__grid, .sm .sm-pol--row .sm-pol__grid { grid-template-columns: 1fr; gap: 30px; }
+    .sm .sm-pol__title { font-size: 14.08px; line-height: 21px; }
+    .sm .sm-pol__text { font-size: 12.32px; line-height: 18.5px; }
+  }
+</style>
+{%- endcapture -%}
+{%- render 'fynk-simmer-wrap', html: sm_html -%}
+
+{% schema %}
+{
+  "name": "Simmer Policies",
+  "tag": "section",
+  "settings": [
+    { "type": "checkbox", "id": "row", "label": "Show three in a row with a line above", "default": false }
+  ],
+  "presets": [{ "name": "Simmer Policies" }]
+}
+{% endschema %}

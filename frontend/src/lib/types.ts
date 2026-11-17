@@ -34,6 +34,7 @@ export interface Product {
   sku: string | null;
   price: string | null;
   cost: string | null;
+  vendor: string | null;
   shopify_status: ShopifyStatus;
   shopify_product_id: string | null;
   shopify_admin_url: string | null;

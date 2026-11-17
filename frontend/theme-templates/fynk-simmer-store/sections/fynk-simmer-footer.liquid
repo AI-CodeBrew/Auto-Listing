@@ -1,0 +1,278 @@
+{%- assign store_gen = shop.metafields.fynk.store_generation.value -%}
+{%- assign ht = store_gen.home_page.text -%}
+{%- assign hi = store_gen.home_page.images -%}
+{%- assign homeData = section.settings.homeData -%}
+{%- if ht == blank and homeData.text != blank -%}{%- assign ht = homeData.text -%}{%- endif -%}
+{%- if hi == blank and homeData.images != blank -%}{%- assign hi = homeData.images -%}{%- endif -%}
+{%- assign store_name = ht.store_name | default: shop.name -%}
+{%- assign menu_handle = section.settings.menu | default: 'footer' -%}
+{%- assign care = linklists[menu_handle].links -%}
+{%- if care == blank -%}{%- assign care = homeData.demo_footer_links -%}{%- endif -%}
+{%- assign policies = shop.policies -%}
+{%- if policies == blank or policies.size == 0 -%}{%- assign policies = homeData.demo_policies -%}{%- endif -%}
+{%- assign shop_categories = homeData.demo_collection_list | default: collections -%}
+{%- assign social = shop.brand.metafields.social_links -%}
+{%- assign s_facebook = ht.social_facebook | default: social.facebook.value -%}
+{%- assign s_instagram = ht.social_instagram | default: social.instagram.value -%}
+{%- assign s_x = ht.social_x | default: social.twitter.value -%}
+{%- assign s_youtube = ht.social_youtube | default: social.youtube.value -%}
+{%- assign s_tiktok = ht.social_tiktok | default: social.tiktok.value -%}
+{%- assign s_pinterest = ht.social_pinterest | default: social.pinterest.value -%}
+{%- assign popup_image = hi.popup_image | default: hi.gallery_image_1 -%}
+{%- capture cat_links -%}
+  {%- assign shown = 0 -%}
+  {%- for category in shop_categories -%}
+    {%- if category.handle != 'frontpage' and category.handle != 'all' and shown < 4 -%}
+      <li><a href="{{ category.url }}">{{ category.title }}</a></li>
+      {%- assign shown = shown | plus: 1 -%}
+    {%- endif -%}
+  {%- endfor -%}
+{%- endcapture -%}
+{%- capture sm_html -%}
+<footer class="sm-ft">
+  <div class="sm-fluid sm-ft__cols" data-sm-fold>
+    <div class="sm-ft__col" data-sm-fold-item>
+      <h2 class="sm-ft__h"><button type="button" aria-expanded="false">{{ ht.footer_contact_heading | default: 'Contact Us' }}<i aria-hidden="true"></i></button></h2>
+      <div class="sm-ft__fold" data-sm-reveal style="--sm-delay: .1s">
+        <ul class="sm-ft__info">
+          {%- if ht.store_address != blank -%}<li>{%- render 'fynk-simmer-icon', name: 'pin', size: 16 -%}<span>{{ ht.store_address | newline_to_br }}</span></li>{%- endif -%}
+          {%- if ht.store_phone != blank -%}<li>{%- render 'fynk-simmer-icon', name: 'phone', size: 16 -%}<a href="tel:{{ ht.store_phone | remove: ' ' }}">{{ ht.store_phone }}</a></li>{%- endif -%}
+          {%- if ht.store_email != blank -%}<li>{%- render 'fynk-simmer-icon', name: 'mail', size: 16 -%}<a href="mailto:{{ ht.store_email }}">{{ ht.store_email }}</a></li>{%- endif -%}
+          {%- if ht.store_hours != blank -%}<li>{%- render 'fynk-simmer-icon', name: 'clock', size: 16 -%}<span>{{ ht.store_hours }}</span></li>{%- endif -%}
+        </ul>
+      </div>
+    </div>
+
+    <div class="sm-ft__col" data-sm-fold-item>
+      <h2 class="sm-ft__h"><button type="button" aria-expanded="false">{{ ht.footer_account_heading | default: 'My Account' }}<i aria-hidden="true"></i></button></h2>
+      <div class="sm-ft__fold" data-sm-reveal style="--sm-delay: .2s"><ul class="sm-ft__links">
+        <li><a href="{{ routes.account_login_url | default: '/account/login' }}">{{ ht.label_login | default: 'Login/Register' }}</a></li>
+        <li><a href="#" data-sm-open="wishlist">{{ ht.label_wishlist | default: 'Wishlist' }}</a></li>
+        <li><a href="{{ routes.cart_url | default: '/cart' }}" data-sm-open="cart">{{ ht.label_checkout | default: 'Checkout' }}</a></li>
+      </ul></div>
+    </div>
+
+    {%- if policies != blank -%}
+      <div class="sm-ft__col" data-sm-fold-item>
+        <h2 class="sm-ft__h"><button type="button" aria-expanded="false">{{ ht.footer_policies_heading | default: 'Our Policies' }}<i aria-hidden="true"></i></button></h2>
+        <div class="sm-ft__fold" data-sm-reveal style="--sm-delay: .3s"><ul class="sm-ft__links">{%- assign shown_policies = 0 -%}{%- for policy in policies -%}{%- unless policy.url contains 'refund' or shown_policies >= 4 -%}<li><a href="{{ policy.url }}">{{ policy.title }}</a></li>{%- assign shown_policies = shown_policies | plus: 1 -%}{%- endunless -%}{%- endfor -%}</ul></div>
+      </div>
+    {%- endif -%}
+
+    {%- if cat_links != blank -%}
+      <div class="sm-ft__col" data-sm-fold-item>
+        <h2 class="sm-ft__h"><button type="button" aria-expanded="false">{{ ht.footer_collection_heading | default: 'Collection' }}<i aria-hidden="true"></i></button></h2>
+        <div class="sm-ft__fold" data-sm-reveal style="--sm-delay: .4s"><ul class="sm-ft__links">{{ cat_links }}</ul></div>
+      </div>
+    {%- endif -%}
+
+    {%- if care != blank -%}
+      <div class="sm-ft__col" data-sm-fold-item>
+        <h2 class="sm-ft__h"><button type="button" aria-expanded="false">{{ ht.footer_care_heading | default: 'Customer Care' }}<i aria-hidden="true"></i></button></h2>
+        <div class="sm-ft__fold" data-sm-reveal style="--sm-delay: .5s"><ul class="sm-ft__links">{%- for link in care limit: 4 -%}<li><a href="{{ link.url }}">{{ link.title }}</a></li>{%- endfor -%}</ul></div>
+      </div>
+    {%- endif -%}
+  </div>
+
+  <div class="sm-ft__mid">
+    <div class="sm-fluid sm-ft__midin">
+      <div class="sm-ft__part sm-ft__thanks">
+        <div class="sm-ft__thanksin">
+          <a class="sm-ft__brand sm-logo" href="{{ routes.root_url | default: '/' }}">
+            {%- if shop.brand.logo != blank -%}<img src="{{ shop.brand.logo | image_url: width: 320 }}" alt="{{ store_name | escape }}" width="{{ shop.brand.logo.width }}" height="{{ shop.brand.logo.height }}">{%- else -%}{{ store_name }}{%- endif -%}
+          </a>
+          {%- if ht.footer_thanks_heading != blank -%}<h3 class="sm-ft__thankshead">{{ ht.footer_thanks_heading }}</h3>{%- endif -%}
+          {%- if ht.footer_thanks_text != blank -%}<p class="sm-ft__thankstext">{{ ht.footer_thanks_text }}</p>{%- endif -%}
+        </div>
+      </div>
+      <div class="sm-ft__part sm-ft__news">
+        <div class="sm-ft__newsin">
+          <h3 class="sm-ft__newshead">{{ ht.footer_newsletter_heading | default: 'Subscribe Our Newsletter' }}</h3>
+          {%- if ht.footer_newsletter_text != blank -%}<p class="sm-ft__newstext">{{ ht.footer_newsletter_text }}</p>{%- endif -%}
+          {%- form 'customer', id: 'sm-newsletter', class: 'sm-ft__form' -%}
+            <input type="hidden" name="contact[tags]" value="newsletter">
+            {%- if form.posted_successfully? -%}
+              <p class="sm-ft__ok" role="status">{{ ht.label_subscribed | default: 'Thanks for subscribing.' }}</p>
+            {%- else -%}
+              <input class="sm-ft__input" type="email" name="contact[email]" placeholder="{{ ht.label_email | default: 'Enter your email' | escape }}" aria-label="{{ ht.label_email | default: 'Enter your email' | escape }}" autocomplete="email" required>
+              <button class="sm-btn sm-btn--dark sm-ft__submit" type="submit">{{ ht.label_subscribe | default: 'Subscribe' }}</button>
+            {%- endif -%}
+          {%- endform -%}
+        </div>
+      </div>
+      <div class="sm-ft__part sm-ft__end">
+        <p class="sm-ft__tiny">{{ ht.label_follow | default: 'Follow Us' }}</p>
+        <ul class="sm-ft__social">
+          {%- if s_facebook != blank -%}<li><a href="{{ s_facebook }}" aria-label="Facebook" rel="noopener" target="_blank">{%- render 'fynk-simmer-icon', name: 'facebook', size: 22 -%}</a></li>{%- endif -%}
+          {%- if s_instagram != blank -%}<li><a href="{{ s_instagram }}" aria-label="Instagram" rel="noopener" target="_blank">{%- render 'fynk-simmer-icon', name: 'instagram', size: 22 -%}</a></li>{%- endif -%}
+          {%- if s_x != blank -%}<li><a href="{{ s_x }}" aria-label="X" rel="noopener" target="_blank">{%- render 'fynk-simmer-icon', name: 'x', size: 20 -%}</a></li>{%- endif -%}
+          {%- if s_youtube != blank -%}<li><a href="{{ s_youtube }}" aria-label="YouTube" rel="noopener" target="_blank">{%- render 'fynk-simmer-icon', name: 'youtube', size: 22 -%}</a></li>{%- endif -%}
+          {%- if s_tiktok != blank -%}<li><a href="{{ s_tiktok }}" aria-label="TikTok" rel="noopener" target="_blank">{%- render 'fynk-simmer-icon', name: 'tiktok', size: 22 -%}</a></li>{%- endif -%}
+          {%- if s_pinterest != blank -%}<li><a href="{{ s_pinterest }}" aria-label="Pinterest" rel="noopener" target="_blank">{%- render 'fynk-simmer-icon', name: 'pinterest', size: 22 -%}</a></li>{%- endif -%}
+        </ul>
+        <p class="sm-ft__tiny sm-ft__paylabel">{{ ht.label_payments | default: 'We Accept Payments' }}</p>
+        <div class="sm-ft__pay">
+          {%- if shop.enabled_payment_types != blank -%}
+            {%- for type in shop.enabled_payment_types -%}{{ type | payment_type_svg_tag: class: 'sm-ft__payicon' }}{%- endfor -%}
+          {%- else -%}
+            {{ homeData.demo_payments }}
+          {%- endif -%}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sm-fluid">
+    <div class="sm-ft__bar">
+      <p class="sm-ft__copy">{{ ht.label_copyright | default: 'Copyright' }} &copy; {{ 'now' | date: '%Y' }} {{ store_name }}. {{ ht.label_rights | default: 'All Rights Reserved.' }}{% if powered_by_link != blank %} {{ powered_by_link }}{% endif %}</p>
+      {%- if localization.available_countries.size > 1 or localization.available_languages.size > 1 -%}
+        {%- form 'localization', class: 'sm-ft__locform' -%}
+          {%- if localization.available_countries.size > 1 -%}
+            <select name="country_code" aria-label="Country" onchange="this.form.submit()">
+              {%- for country in localization.available_countries -%}<option value="{{ country.iso_code }}"{% if country.iso_code == localization.country.iso_code %} selected{% endif %}>{{ country.name }} | {{ country.currency.iso_code }} {{ country.currency.symbol }}</option>{%- endfor -%}
+            </select>
+          {%- endif -%}
+          {%- if localization.available_languages.size > 1 -%}
+            <select name="language_code" aria-label="Language" onchange="this.form.submit()">
+              {%- for language in localization.available_languages -%}<option value="{{ language.iso_code }}"{% if language.iso_code == localization.language.iso_code %} selected{% endif %}>{{ language.endonym_name }}</option>{%- endfor -%}
+            </select>
+          {%- endif -%}
+        {%- endform -%}
+      {%- endif -%}
+    </div>
+  </div>
+</footer>
+
+<button class="sm-top" type="button" aria-label="{{ ht.label_top | default: 'Back to top' | escape }}" data-sm-top>
+  <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="18.5" fill="none" stroke="rgb(28 28 28 / .2)" stroke-width="2"/><circle data-sm-ring cx="20" cy="20" r="18.5" fill="none" stroke="#1c1c1c" stroke-width="2" transform="rotate(-90 20 20)"/></svg>
+  <span>{%- render 'fynk-simmer-icon', name: 'up', size: 14, stroke: 2.2 -%}</span>
+</button>
+
+{%- if ht.popup_heading != blank -%}
+<dialog class="sm-modal sm-pop" data-sm-dialog="popup" aria-label="{{ ht.popup_heading | escape }}">
+  <button class="sm-x sm-corner" type="button" aria-label="Close" data-sm-close>{%- render 'fynk-simmer-icon', name: 'close', size: 18 -%}</button>
+  <div class="sm-pop__in">
+    <div class="sm-pop__pic">{%- render 'fynk-simmer-img', src: popup_image, alt: '', width: 820, lazy: true -%}</div>
+    <div class="sm-pop__body">
+      <h2 class="sm-pop__title">{{ ht.popup_heading }}</h2>
+      {%- if ht.popup_text != blank -%}<p class="sm-pop__text">{{ ht.popup_text }}</p>{%- endif -%}
+      {%- form 'customer', id: 'sm-popup-news', class: 'sm-pop__form' -%}
+        <input type="hidden" name="contact[tags]" value="newsletter">
+        <input class="sm-field sm-pop__field" type="email" name="contact[email]" placeholder="{{ ht.label_email | default: 'Enter your email' | escape }}" aria-label="{{ ht.label_email | default: 'Enter your email' | escape }}" autocomplete="email" required>
+        <button class="sm-btn sm-btn--dark" type="submit">{{ ht.label_submit | default: 'Submit' }}</button>
+      {%- endform -%}
+      <label class="sm-pop__off"><input type="checkbox" data-sm-popup-off><span>{{ ht.label_popup_off | default: "Don't show this popup again" }}</span></label>
+    </div>
+  </div>
+</dialog>
+{%- endif -%}
+
+<style>
+  .sm .sm-ft { position: relative; overflow: hidden; background: var(--sm-foot); color: var(--sm-text); }
+  .sm .sm-ft__cols { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 30px; padding-block: 80px 50px; }
+  .sm .sm-ft__h { font-size: inherit; }
+  .sm .sm-ft__h button { position: relative; display: block; width: 100%; padding: 0; border: 0; background: none; font-size: 17.28px; line-height: 25.92px; font-weight: 500; text-align: start; color: var(--sm-ink); cursor: default; }
+  .sm .sm-ft__h i { display: none; }
+  .sm .sm-ft__fold { margin-top: 20px; }
+  .sm .sm-ft__info li { display: flex; align-items: center; gap: 10px; font-size: 13.44px; line-height: 20.16px; }
+  .sm .sm-ft__info li:not(:last-child), .sm .sm-ft__links li:not(:last-child) { margin-bottom: 20px; }
+  .sm .sm-ft__info svg { flex: none; min-width: 15px; color: var(--sm-ink); }
+  .sm .sm-ft__links li { font-size: 13.44px; line-height: 20.16px; }
+  .sm .sm-ft a { transition: color .2s; }
+  .sm .sm-ft__info a:hover, .sm .sm-ft__links a:hover, .sm .sm-ft__social a:hover { color: var(--sm-accent); }
+
+  .sm .sm-ft__mid { border-top: 1px solid var(--sm-rule); }
+  .sm .sm-ft__midin { display: grid; grid-template-columns: 30% 40% 30%; align-items: center; padding-block: 65px; padding-inline: 0; }
+  .sm .sm-ft__part { position: relative; padding-inline: 15px; }
+  .sm .sm-ft__part:not(:last-child)::after { content: ""; position: absolute; top: 50%; inset-inline-end: 0; width: 1px; height: 96px; background: var(--sm-rule); transform: translateY(-50%); }
+  .sm .sm-ft__thanksin { max-width: 425px; }
+  .sm .sm-ft__brand { display: inline-block; margin-bottom: 30px; font-size: 42px; line-height: 34px; color: var(--sm-ink); }
+  .sm .sm-ft__brand img { max-width: 121px; max-height: 46px; width: auto; }
+  .sm .sm-ft__thankshead, .sm .sm-ft__newshead { font-size: 17.28px; line-height: 25.92px; font-weight: 500 !important; color: var(--sm-ink); }
+  .sm .sm-ft__thankstext { margin-top: 10px; font-size: 13.44px; line-height: 20.16px; }
+  .sm .sm-ft__news { text-align: center; }
+  .sm .sm-ft__newsin { max-width: 425px; margin: auto; }
+  .sm .sm-ft__newstext { margin: 5px 0 30px; font-size: 13.44px; line-height: 20.16px; }
+  .sm .sm-ft__form { position: relative; margin: 0; }
+  .sm .sm-ft__input { display: block; width: 100%; height: 66px; padding: 0 160px 0 20px; border: 1px solid #fff; border-radius: 50px; background: #fff; color: var(--sm-text); font-size: 12px; box-shadow: 1px 1px 10px rgb(0 0 0 / .06); outline: none; transition: border-color .15s ease-in-out; }
+  .sm[dir="rtl"] .sm-ft__input { padding: 0 20px 0 160px; }
+  .sm .sm-ft__input:focus { border-color: var(--sm-ink); }
+  .sm .sm-ft__input::placeholder { color: var(--sm-text); opacity: 1; }
+  .sm .sm-ft__submit { position: absolute; top: 50%; inset-inline-end: 6px; min-width: 145px; height: 54px; transform: translateY(-50%); }
+  .sm .sm-ft__ok { font-size: 13.44px; color: var(--sm-ink); }
+  .sm .sm-ft__end { text-align: end; }
+  .sm .sm-ft__tiny { margin-bottom: 15px; font-size: 11.52px; line-height: 17.28px; color: var(--sm-ink); }
+  .sm .sm-ft__social { display: inline-flex; gap: 19.2px; color: var(--sm-ink); }
+  .sm .sm-ft__social a { display: grid; }
+  .sm .sm-ft__paylabel { margin-top: 30px; }
+  .sm .sm-ft__pay { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 9px; }
+  .sm .sm-ft__payicon, .sm .sm-ft__pay svg { width: 36px; height: 24px; }
+  .sm .sm-ft__bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px 30px; padding-block: 40px; border-top: 1px solid var(--sm-rule); text-align: center; }
+  .sm .sm-ft__copy { font-size: 13.44px; line-height: 20.16px; color: var(--sm-ink); }
+  .sm .sm-ft__locform { display: flex; flex-wrap: wrap; gap: 14px; margin: 0; }
+  .sm .sm-ft__locform select { max-width: 220px; border: 0; background: transparent; color: var(--sm-ink); font-size: 13.44px; font-weight: 500; cursor: pointer; }
+
+  .sm .sm-top { position: fixed; inset-inline-end: 15px; bottom: 70px; z-index: 40; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; opacity: 0; visibility: hidden; transform: translateY(14px); transition: opacity .3s ease, transform .3s ease, visibility .3s; }
+  .sm .sm-top.is-on { opacity: 1; visibility: visible; transform: none; }
+  .sm .sm-top > svg { position: absolute; inset: 0; }
+  .sm .sm-top > span { position: absolute; inset: 5px; display: grid; place-items: center; border-radius: 50%; background: var(--sm-ink); color: #fff; transition: background-color .25s ease; }
+  .sm .sm-top:hover > span { background: var(--sm-accent); }
+
+  .sm .sm-pop__in { display: grid; grid-template-columns: 46.3% minmax(0, 1fr); min-height: 516px; }
+  .sm .sm-pop__pic { background: var(--sm-tile); }
+  .sm .sm-pop__pic img { width: 100%; height: 100%; object-fit: cover; }
+  .sm .sm-pop__body { display: flex; flex-direction: column; justify-content: center; padding: 60px 67px 44px 43px; }
+  .sm .sm-pop__title { font-size: 21px; line-height: 30px; font-weight: 800 !important; text-transform: uppercase; color: var(--sm-ink); }
+  .sm .sm-pop__text { margin-top: 18px; font-size: 13.44px; line-height: 18px; color: var(--sm-text); }
+  .sm .sm-pop__form { display: grid; gap: 10px; margin: 26px 0 0; }
+  .sm .sm-pop__field { text-align: center; }
+  .sm .sm-pop__form .sm-btn { width: 100%; height: 50px; }
+  .sm .sm-pop__off { display: flex; align-items: center; gap: 14px; margin-top: 70px; font-size: 11px; text-transform: uppercase; color: var(--sm-text); cursor: pointer; }
+  .sm .sm-pop__off input { width: 18px; height: 18px; margin: 0; accent-color: var(--sm-ink); }
+
+  @media (max-width: 1199px) {
+    .sm .sm-ft__cols { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 50px 30px; }
+  }
+  @media (max-width: 991px) {
+    .sm .sm-ft__midin { grid-template-columns: 1fr; gap: 30px; text-align: center; }
+    .sm .sm-ft__thanksin { margin: auto; }
+    .sm .sm-ft__end { text-align: center; }
+    .sm .sm-ft__pay { justify-content: center; }
+    .sm .sm-ft__part:not(:last-child)::after { display: none; }
+  }
+  @media (max-width: 1024px) {
+    .sm .sm-ft { padding-block-end: 56px; }
+  }
+  @media (max-width: 575px) {
+    .sm .sm-ft__cols { grid-template-columns: 1fr; gap: 0; padding-block: 44px 24px; }
+    .sm .sm-ft__h button { padding-block: 10px; cursor: pointer; }
+    .sm .sm-ft__h i { position: absolute; top: 50%; inset-inline-end: 0; display: block; width: 13px; height: 13px; margin-top: -6.5px; }
+    .sm .sm-ft__h i::before, .sm .sm-ft__h i::after { content: ""; position: absolute; inset-inline-start: 0; top: 5.75px; width: 13px; height: 1.5px; background: currentColor; transition: transform .3s ease; }
+    .sm .sm-ft__h i::after { transform: rotate(90deg); }
+    .sm .sm-ft__col.is-open .sm-ft__h i::after { transform: none; }
+    .sm .sm-ft__fold { display: none; margin: 10px 0 20px; }
+    .sm .sm-ft__col.is-open .sm-ft__fold { display: block; }
+    .sm .sm-ft__fold[data-sm-reveal] { opacity: 1 !important; animation: none !important; }
+    .sm .sm-ft__bar { padding-block: 28px; }
+  }
+  @media (max-width: 749px) {
+    .sm .sm-pop__in { grid-template-columns: 1fr; min-height: 0; }
+    .sm .sm-pop__pic { display: none; }
+    .sm .sm-pop__body { padding: 56px 24px 28px; }
+    .sm .sm-pop__off { margin-top: 26px; }
+  }
+</style>
+{{ homeData.demo_runtime }}
+{%- endcapture -%}
+{%- render 'fynk-simmer-wrap', html: sm_html -%}
+
+{% schema %}
+{
+  "name": "Simmer Footer",
+  "tag": "section",
+  "settings": [
+    { "type": "link_list", "id": "menu", "label": "Customer care menu", "default": "footer" }
+  ],
+  "presets": [{ "name": "Simmer Footer" }]
+}
+{% endschema %}

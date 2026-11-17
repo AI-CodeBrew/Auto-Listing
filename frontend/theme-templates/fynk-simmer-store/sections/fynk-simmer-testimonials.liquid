@@ -1,0 +1,94 @@
+{%- assign store_gen = shop.metafields.fynk.store_generation.value -%}
+{%- assign ht = store_gen.home_page.text -%}
+{%- assign hi = store_gen.home_page.images -%}
+{%- assign homeData = section.settings.homeData -%}
+{%- if ht == blank and homeData.text != blank -%}{%- assign ht = homeData.text -%}{%- endif -%}
+{%- if hi == blank and homeData.images != blank -%}{%- assign hi = homeData.images -%}{%- endif -%}
+{%- capture sm_html -%}
+{%- if ht.customer_review_1 != blank -%}
+<section class="sm-rv" data-sm-rail>
+  <div class="sm-fluid">
+    <div class="sm-rv__head">
+      {%- if ht.testimonials_kicker != blank -%}<p class="sm-kick">{{ ht.testimonials_kicker }}</p>{%- endif -%}
+      <h2 class="sm-title sm-rv__title">{{ ht.testimonials_heading }}</h2>
+    </div>
+    <div class="sm-rail__track" data-sm-track data-sm-speed="500">
+      {%- for i in (1..5) -%}
+        {%- assign name_key = 'customer_name_' | append: i -%}
+        {%- assign review_key = 'customer_review_' | append: i -%}
+        {%- assign role_key = 'customer_role_' | append: i -%}
+        {%- assign avatar_key = 'customer_avatar_' | append: i -%}
+        {%- if ht[review_key] != blank -%}
+          <figure class="sm-rv__card">
+            <span class="sm-rv__stars" role="img" aria-label="5 / 5"><i></i><i></i><i></i><i></i><i></i></span>
+            <blockquote class="sm-rv__quote">{{ ht[review_key] }}</blockquote>
+            <figcaption class="sm-rv__who">
+              <span class="sm-rv__pic">
+                {%- if hi[avatar_key] != blank -%}
+                  {%- render 'fynk-simmer-img', src: hi[avatar_key], alt: ht[name_key], width: 160, lazy: true -%}
+                {%- else -%}
+                  <span class="sm-rv__initial" aria-hidden="true">{{ ht[name_key] | slice: 0 }}</span>
+                {%- endif -%}
+              </span>
+              <span>
+                <span class="sm-rv__name">{{ ht[name_key] }}</span>
+                {%- if ht[role_key] != blank -%}<span class="sm-rv__role">{{ ht[role_key] }}</span>{%- endif -%}
+              </span>
+            </figcaption>
+          </figure>
+        {%- endif -%}
+      {%- endfor -%}
+    </div>
+    <div class="sm-rv__nav">
+      <button type="button" aria-label="Previous reviews" data-sm-prev>{%- render 'fynk-simmer-icon', name: 'prev', size: 18, stroke: 1.8 -%}</button>
+      <div class="sm-dots sm-rv__dots" data-sm-rail-dots></div>
+      <button type="button" aria-label="Next reviews" data-sm-next>{%- render 'fynk-simmer-icon', name: 'next', size: 18, stroke: 1.8 -%}</button>
+    </div>
+  </div>
+</section>
+{%- endif -%}
+<style>
+  .sm .sm-rv { padding-block-end: 120px; background: #fff; }
+  .sm .sm-rv__head { margin-bottom: 65px; }
+  .sm .sm-rv__head .sm-kick { margin-bottom: 15px; }
+  .sm .sm-rv__title { margin-top: 0; }
+  .sm .sm-rv .sm-rail__track { --sm-gap: 30px; --sm-col: calc((100% - 60px) / 3); }
+  .sm .sm-rv__card { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; margin: 0; }
+  .sm .sm-rv__stars { display: flex; gap: 4px; height: 18px; align-items: center; margin-bottom: 25px; }
+  .sm .sm-rv__stars i { width: 13px; height: 13px; background: var(--sm-ink); -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 1.5l3.1 6.6 7.2.9-5.3 5 1.400 7.200L12 17.700 5.600 21.200l1.400-7.200-5.300-5 7.200-.9z'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 1.5l3.1 6.6 7.2.9-5.3 5 1.400 7.200L12 17.700 5.600 21.200l1.400-7.200-5.300-5 7.200-.9z'/%3E%3C/svg%3E") center / contain no-repeat; }
+  .sm .sm-rv__quote { margin: 0; font-size: 17.28px; line-height: 25.92px; color: var(--sm-ink); }
+  .sm .sm-rv__who { display: flex; align-items: center; margin-top: 25px; }
+  .sm .sm-rv__pic { flex: none; display: block; width: 60px; height: 60px; margin-inline-end: 25px; overflow: hidden; border-radius: 100%; background: var(--sm-review); }
+  .sm .sm-rv__pic img { width: 100%; height: 100%; object-fit: cover; transition: transform .3s linear; }
+  .sm .sm-rv__card:hover .sm-rv__pic img { transform: scale(1.07); }
+  .sm .sm-rv__initial { display: grid; place-items: center; height: 100%; font-size: 22px; font-weight: 500; color: var(--sm-muted); }
+  .sm .sm-rv__name { display: block; font-size: 11.52px; line-height: 17.28px; font-weight: 500; color: var(--sm-ink); }
+  .sm .sm-rv__role { display: block; font-size: 11.52px; line-height: 17.28px; font-weight: 500; color: var(--sm-text); }
+  .sm .sm-rv__nav { display: flex; align-items: center; margin-top: 60px; }
+  .sm .sm-rv__nav > button { display: grid; place-items: center; width: 50px; height: 50px; padding: 0; border: 0; background: none; color: var(--sm-ink); cursor: pointer; transition: color .2s ease; }
+  .sm .sm-rv__nav > button:hover { color: var(--sm-accent); }
+  .sm .sm-rv__nav > button[disabled] { color: var(--sm-muted); cursor: default; }
+  .sm[dir="rtl"] .sm-rv__nav svg { transform: scaleX(-1); }
+  .sm .sm-rv__dots { margin-inline: 5px; color: var(--sm-ink); }
+  .sm .sm-rv__dots:empty { display: none; }
+  .sm .sm-rv__dots button.is-on { width: 8px; background: currentColor; }
+  @media (max-width: 1199px) { .sm .sm-rv { padding-block-end: 100px; } .sm .sm-rv .sm-rail__track { --sm-col: calc((100% - 30px) / 2); } }
+  @media (max-width: 991px) { .sm .sm-rv { padding-block-end: 80px; } .sm .sm-rv__head { margin-bottom: 40px; } }
+  @media (max-width: 767px) {
+    .sm .sm-rv { padding-block-end: 60px; }
+    .sm .sm-rv .sm-rail__track { --sm-col: 100%; }
+    .sm .sm-rv__quote { font-size: 15.36px; line-height: 23px; }
+    .sm .sm-rv__nav { margin-top: 30px; }
+  }
+</style>
+{%- endcapture -%}
+{%- render 'fynk-simmer-wrap', html: sm_html -%}
+
+{% schema %}
+{
+  "name": "Simmer Testimonials",
+  "tag": "section",
+  "settings": [],
+  "presets": [{ "name": "Simmer Testimonials" }]
+}
+{% endschema %}
